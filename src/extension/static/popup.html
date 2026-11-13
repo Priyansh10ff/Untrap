@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Untrap</title>
+  <link rel="stylesheet" href="ui.css" />
+</head>
+<body class="popup">
+  <header class="top">
+    <div class="brand"><img src="icons/32.png" alt="" width="22" height="22" />Untrap</div>
+    <label class="switch" title="Turn Untrap on or off">
+      <input type="checkbox" id="enabled" />
+      <span class="slider"></span>
+    </label>
+  </header>
+
+  <section class="status" id="status">
+    <div class="status-icon" id="status-icon"></div>
+    <div>
+      <h1 id="status-title">Checking this page…</h1>
+      <p id="status-sub"></p>
+    </div>
+  </section>
+
+  <ol class="findings" id="findings"></ol>
+
+  <div class="actions">
+    <button class="btn primary" id="xray" type="button">X-ray this page</button>
+    <button class="btn" id="pause" type="button">Pause on this site</button>
+  </div>
+
+  <footer class="foot">
+    <div class="engine" id="engine"><span class="dot"></span><span id="engine-text">Checking the on-device model…</span></div>
+    <div class="foot-row">
+      <span id="stats"></span>
+      <a href="welcome.html" target="_blank" id="settings-link">Settings</a>
+    </div>
+  </footer>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

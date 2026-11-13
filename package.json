@@ -1,0 +1,30 @@
+{
+  "name": "untrap",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Safe Browsing for AI agents: finds and removes hidden prompt-injection traps from web pages before any AI reads them.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "test": "vitest run",
+    "test:browser": "node scripts/test-browser.mjs",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm test && npm run build",
+    "zip": "node scripts/zip.mjs"
+  },
+  "dependencies": {
+    "firebase": "13.3.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "0.3.7",
+    "esbuild": "0.28.2",
+    "happy-dom": "21.0.4",
+    "typescript": "5.9.3",
+    "vitest": "5.1.0"
+  }
+}

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Untrap settings</title>
+  <link rel="icon" href="icons/32.png" />
+  <link rel="stylesheet" href="ui.css" />
+</head>
+<body class="page">
+  <main class="page-wrap">
+    <div class="hero">
+      <img src="icons/128.png" alt="" width="64" height="64" />
+      <div>
+        <h1>Untrap is on</h1>
+        <p>Every page you open is checked for hidden instructions aimed at AI agents. Traps are removed before any AI reads the page.</p>
+      </div>
+    </div>
+
+    <section class="card">
+      <h2><span class="step">1</span>Turn on private, free checks with Gemini Nano</h2>
+      <p>Gemini Nano runs inside Chrome on your computer. Pages are checked on your device, so what you browse stays private and costs nothing. It's a one-time download of about 4 GB and needs Chrome on desktop with 22 GB free disk space.</p>
+      <div class="model-row">
+        <span class="pill" id="model-pill">Checking…</span>
+        <div class="progress" id="progress"><span id="progress-bar"></span></div>
+        <button class="btn green" id="download" type="button" hidden>Download Gemini Nano</button>
+      </div>
+      <p class="note" id="model-note"></p>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">2</span>Choose how Untrap works</h2>
+      <div class="setting">
+        <div><b>Second opinion from cloud AI</b><span>When Gemini Nano is unsure, or isn't available on this computer, the suspicious snippet (never the whole page) is checked by Gemini in the cloud.</span></div>
+        <label class="switch"><input type="checkbox" id="cloud" /><span class="slider"></span></label>
+      </div>
+      <div class="setting">
+        <div><b>Shared blocklist</b><span>Check snippets against traps other Untrap users already found, and add confirmed traps to it. Only a fingerprint of the text, the trap type and the attacking site are shared.</span></div>
+        <label class="switch"><input type="checkbox" id="share" /><span class="slider"></span></label>
+      </div>
+      <div class="setting">
+        <div><b>Paused sites</b><span id="paused">None</span></div>
+        <button class="btn" id="clear-paused" type="button">Clear</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">3</span>See it work</h2>
+      <p>The Attack Lab is a normal-looking page with 11 fake traps hidden in it. Open it with Untrap on, then click the Untrap icon and press <b>X-ray this page</b>.</p>
+      <div class="model-row"><a class="btn primary" id="lab-link" target="_blank" rel="noopener">Open the Attack Lab</a></div>
+      <div class="how">
+        <div><b>1. Rules</b>Hidden text is found and scored in milliseconds.</div>
+        <div><b>2. On-device AI</b>Gemini Nano decides if it's a trap, privately and for free.</div>
+        <div><b>3. Cloud and community</b>Unsure cases get a second opinion. Confirmed traps protect everyone.</div>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="welcome.js"></script>
+</body>
+</html>

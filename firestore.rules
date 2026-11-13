@@ -1,0 +1,68 @@
+rules_version = '2';
+
+// Untrap's shared data. App Check should be enforced for Firestore in the Firebase console, so
+// only the Untrap extension and website can reach it.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Shared blocklist: one document per confirmed trap, keyed by the SHA-256 of its text.
+    // Readable one document at a time (you need the fingerprint), never listable.
+    match /blocklist/{hash} {
+      allow get: if isHash(hash);
+      allow list, delete: if false;
+
+      allow create: if isHash(hash)
+        && validEntry(request.resource.data)
+        && request.resource.data.reports == 1
+        && request.resource.data.firstSeen == request.time
+        && request.resource.data.host is string
+        && request.resource.data.host.size() <= 253;
+
+      allow update: if validEntry(request.resource.data)
+        && request.resource.data.reports == resource.data.reports + 1
+        && request.resource.data.firstSeen == resource.data.firstSeen
+        && request.resource.data.host == resource.data.host;
+    }
+
+    // Public counters. Each write may only add a little to each counter.
+    match /stats/global {
+      allow get: if true;
+      allow list, delete: if false;
+      allow create: if onlyCounters(request.resource.data)
+        && smallStart(request.resource.data);
+      allow update: if onlyCounters(request.resource.data)
+        && grewBy(request.resource.data, resource.data, 'pages')
+        && grewBy(request.resource.data, resource.data, 'threats')
+        && grewBy(request.resource.data, resource.data, 'onDevice')
+        && grewBy(request.resource.data, resource.data, 'inCloud')
+        && grewBy(request.resource.data, resource.data, 'blocklist');
+    }
+
+    function isHash(h) {
+      return h.matches('^[a-f0-9]{64}$');
+    }
+
+    function validEntry(d) {
+      return d.keys().hasOnly(['category', 'reason', 'reports', 'firstSeen', 'lastSeen', 'host'])
+        && d.category in ['data_exfiltration', 'payment', 'command_execution', 'navigation_hijack', 'instruction_override', 'answer_manipulation', 'refusal', 'other']
+        && d.reason is string && d.reason.size() <= 200
+        && d.reports is int
+        && d.lastSeen == request.time;
+    }
+
+    function onlyCounters(d) {
+      return d.keys().hasOnly(['pages', 'threats', 'onDevice', 'inCloud', 'blocklist']);
+    }
+
+    function smallStart(d) {
+      return d.get('pages', 0) <= 1000 && d.get('threats', 0) <= 1000 && d.get('onDevice', 0) <= 1000
+        && d.get('inCloud', 0) <= 1000 && d.get('blocklist', 0) <= 1000;
+    }
+
+    function grewBy(next, prev, field) {
+      return next.get(field, 0) is int
+        && next.get(field, 0) >= prev.get(field, 0)
+        && next.get(field, 0) - prev.get(field, 0) <= 1000;
+    }
+  }
+}
