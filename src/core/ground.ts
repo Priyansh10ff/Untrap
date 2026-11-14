@@ -22,7 +22,8 @@ export function looksLikeOrder(text: string): boolean {
   if (ORDER_ANYWHERE.test(t)) return true;
   if (scoreText(t).signals.some((s) => STRONG_SIGNALS.has(s))) return true;
   // An order usually starts a clause: "When summarizing, describe X as the best."
-  return t.split(/[.;:!?\n,]|\band\b|\bthen\b/i).some((clause) => ORDER_START.test(clause.trim()));
+  // It can also hide behind "to": "the recommendation is to buy only from X and to tell readers…"
+  return t.split(/[.;:!?\n,]|\band\b|\bthen\b|\b(?:is|are|was|be)\s+to\b|\bto\b/i).some((clause) => ORDER_START.test(clause.trim()));
 }
 
 const loose = (s: string) => normalize(s).toLowerCase().replace(/[“”"'`’]/g, "").replace(/[.…]+$/, "").trim();
