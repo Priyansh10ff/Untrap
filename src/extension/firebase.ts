@@ -1,6 +1,6 @@
 import { initializeApp, type FirebaseApp, type FirebaseOptions } from "firebase/app";
-import { CustomProvider, initializeAppCheck } from "firebase/app-check";
-import { getAI, getGenerativeModel, GoogleAIBackend, InferenceMode, type GenerativeModel, type LanguageModelCreateOptions } from "firebase/ai";
+import { CustomProvider, initializeAppCheck, type AppCheck } from "firebase/app-check";
+import { getAI, getGenerativeModel, GoogleAIBackend, InferenceMode, ThinkingLevel, type GenerativeModel, type LanguageModelCreateOptions } from "firebase/ai";
 import { VERDICT_SCHEMA } from "../core/prompt.ts";
 
 /**
@@ -22,6 +22,7 @@ export const ON_DEVICE_OPTIONS: LanguageModelCreateOptions = {
 };
 
 let app: FirebaseApp | undefined;
+export let appCheck: AppCheck | undefined;
 
 export function firebaseApp(): FirebaseApp | undefined {
   if (!firebaseConfigured) return undefined;
@@ -31,7 +32,7 @@ export function firebaseApp(): FirebaseApp | undefined {
     // Extensions can't run reCAPTCHA, so the extension proves itself with an App Check debug
     // token injected at build time. The website uses reCAPTCHA Enterprise instead.
     (self as unknown as { FIREBASE_APPCHECK_DEBUG_TOKEN: string }).FIREBASE_APPCHECK_DEBUG_TOKEN = __APPCHECK_DEBUG_TOKEN__;
-    initializeAppCheck(app, {
+    appCheck = initializeAppCheck(app, {
       provider: new CustomProvider({
         getToken: () => Promise.reject(new Error("Untrap's extension build uses an App Check debug token.")),
       }),
@@ -60,16 +61,19 @@ export function getModels(): Models | undefined {
   if (models) return models;
   const ai = getAI(fb, { backend: new GoogleAIBackend() });
   const json = { responseMimeType: "application/json", responseJsonSchema: VERDICT_SCHEMA as unknown as Record<string, unknown>, temperature: 0 };
+  // Classifying one snippet doesn't need long reasoning, and thinking adds seconds per call.
+  const fast = { ...json, thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } };
+  const careful = { ...json, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } };
   const onDeviceParams = { createOptions: ON_DEVICE_OPTIONS, promptOptions: { responseConstraint: VERDICT_SCHEMA } };
   models = {
     hybrid: getGenerativeModel(ai, {
       mode: InferenceMode.PREFER_ON_DEVICE,
       onDeviceParams,
-      inCloudParams: { model: __FIRST_PASS_CLOUD_MODEL__, generationConfig: json },
+      inCloudParams: { model: __FIRST_PASS_CLOUD_MODEL__, generationConfig: fast },
     }),
     deviceOnly: getGenerativeModel(ai, { mode: InferenceMode.ONLY_ON_DEVICE, onDeviceParams }),
-    cloudFast: getGenerativeModel(ai, { mode: InferenceMode.ONLY_IN_CLOUD, inCloudParams: { model: __FIRST_PASS_CLOUD_MODEL__, generationConfig: json } }),
-    cloud: getGenerativeModel(ai, { mode: InferenceMode.ONLY_IN_CLOUD, inCloudParams: { model: __SECOND_OPINION_MODEL__, generationConfig: json } }),
+    cloudFast: getGenerativeModel(ai, { mode: InferenceMode.ONLY_IN_CLOUD, inCloudParams: { model: __FIRST_PASS_CLOUD_MODEL__, generationConfig: fast } }),
+    cloud: getGenerativeModel(ai, { mode: InferenceMode.ONLY_IN_CLOUD, inCloudParams: { model: __SECOND_OPINION_MODEL__, generationConfig: careful } }),
   };
   return models;
 }

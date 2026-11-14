@@ -70,6 +70,8 @@ export interface SelfTest {
   cloudMs?: number;
   error?: string;
   cloudError?: string;
+  appCheck?: string;
+  fastCloud?: string;
 }
 
 export interface StatsDelta {

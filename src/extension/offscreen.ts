@@ -4,7 +4,8 @@ import { buildCompactPrompt, buildPrompt, makeNonce, parseVerdict } from "../cor
 import { needsSecondOpinion, rulesVerdict } from "../core/policy.ts";
 import { CATEGORIES, type Candidate, type Verdict } from "../core/types.ts";
 import type { EngineStatus, Msg, SelfTest, Settings, StatsDelta } from "../core/messages.ts";
-import { firebaseApp, firebaseConfigured, getModels, onDeviceAvailability } from "./firebase.ts";
+import { getToken } from "firebase/app-check";
+import { appCheck, firebaseApp, firebaseConfigured, getModels, onDeviceAvailability } from "./firebase.ts";
 
 /**
  * The engine. Lives in an offscreen document so the model session and Firebase stay warm.
@@ -23,6 +24,8 @@ const CLOUD_CHARS = 4000;
 const FIRST_DEVICE_TIMEOUT = 150_000;
 const DEVICE_TIMEOUT = 60_000;
 const CLOUD_TIMEOUT = 30_000;
+/** A second opinion that takes longer than this isn't worth waiting for: Nano's verdict stands. */
+const SECOND_OPINION_TIMEOUT = 20_000;
 /** After a Nano timeout, use the cloud for this long instead of queueing behind a stuck model. */
 const SLOW_DEVICE_BACKOFF = 10 * 60_000;
 const CLOUD_PARALLEL = 4;
@@ -185,7 +188,7 @@ async function classify(tabId: number, url: string, candidates: Candidate[], set
       // Second opinion from a larger cloud model when the device is unsure.
       if (v && v.source === "on_device" && settings.cloud && models && needsSecondOpinion(c, v)) {
         try {
-          v = (await limited(() => ask(models.cloud, c, { compact: false, maxChars: CLOUD_CHARS, timeout: CLOUD_TIMEOUT }))) ?? v;
+          v = (await limited(() => ask(models.cloud, c, { compact: false, maxChars: CLOUD_CHARS, timeout: SECOND_OPINION_TIMEOUT }))) ?? v;
         } catch (err) {
           console.warn("Untrap: second opinion failed", err);
         }
@@ -221,9 +224,27 @@ async function selfTest(): Promise<SelfTest> {
   } catch (err) {
     out.error = describe(err);
   }
+  // App Check token: if this hangs or fails, every cloud call will too.
   try {
     const t0 = performance.now();
-    const v = await ask(models.cloud, c, { compact: false, maxChars: CLOUD_CHARS, timeout: CLOUD_TIMEOUT });
+    if (!appCheck) out.appCheck = "not set up (no debug token in this build)";
+    else {
+      await withTimeout(getToken(appCheck), 20_000);
+      out.appCheck = `ok in ${((performance.now() - t0) / 1000).toFixed(1)}s`;
+    }
+  } catch (err) {
+    out.appCheck = `failed: ${describe(err)}`;
+  }
+  try {
+    const t0 = performance.now();
+    const v = await ask(models.cloudFast, c, { compact: false, maxChars: CLOUD_CHARS, timeout: 60_000 });
+    out.fastCloud = v ? `ok in ${((performance.now() - t0) / 1000).toFixed(1)}s (${v.verdict})` : "replied without a valid verdict";
+  } catch (err) {
+    out.fastCloud = `failed: ${describe(err)}`;
+  }
+  try {
+    const t0 = performance.now();
+    const v = await ask(models.cloud, c, { compact: false, maxChars: CLOUD_CHARS, timeout: SECOND_OPINION_TIMEOUT });
     out.cloudMs = Math.round(performance.now() - t0);
     out.cloudOk = Boolean(v);
   } catch (err) {

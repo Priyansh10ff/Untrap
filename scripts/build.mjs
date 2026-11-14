@@ -37,7 +37,7 @@ const define = {
   __APPCHECK_DEBUG_TOKEN__: JSON.stringify(env.APPCHECK_DEBUG_TOKEN || ""),
   __RECAPTCHA_SITE_KEY__: JSON.stringify(env.RECAPTCHA_ENTERPRISE_SITE_KEY || ""),
   __FIRST_PASS_CLOUD_MODEL__: JSON.stringify(env.FIRST_PASS_CLOUD_MODEL || "gemini-3.5-flash-lite"),
-  __SECOND_OPINION_MODEL__: JSON.stringify(env.SECOND_OPINION_MODEL || "gemini-3.8-flash"),
+  __SECOND_OPINION_MODEL__: JSON.stringify(env.SECOND_OPINION_MODEL || "gemini-3.5-flash-lite"),
   __SITE_URL__: JSON.stringify(siteUrl),
 };
 

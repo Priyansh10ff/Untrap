@@ -103,7 +103,7 @@ $("self-test").addEventListener("click", async () => {
   const where = r.source === "on_device" ? "on this device (Gemini Nano)" : r.source === "in_cloud" ? "in the cloud (Nano wasn't used)" : "";
   const first = r.ok ? `First check ran ${where} in ${((r.ms ?? 0) / 1000).toFixed(1)}s: ${r.verdict} (${r.category}).` : `First check failed: ${r.error}`;
   const cloud = r.cloudOk ? ` Cloud second opinion works (${((r.cloudMs ?? 0) / 1000).toFixed(1)}s).` : ` Cloud second opinion failed: ${r.cloudError ?? "no valid verdict"}`;
-  out.textContent = first + cloud;
+  out.textContent = `${first}${cloud} App Check: ${r.appCheck ?? "?"}. Cloud first pass: ${r.fastCloud ?? "?"}.`;
   button.disabled = false;
 });
 
