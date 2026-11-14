@@ -72,22 +72,16 @@ export function needsSecondOpinion(c: Candidate, v: Verdict, policy: Policy = PO
   return c.hidden && c.score >= policy.rulesDisagree;
 }
 
-/** The verdict we use when no model is available: rules only, on the cautious side. */
+/**
+ * The verdict we use when no model is available. Without AI we can't tell an article about
+ * prompt injection from an actual one, so rules alone only act on hidden text with strong
+ * signals. Visible text is left to the AI.
+ */
 export function rulesVerdict(c: Candidate, policy: Policy = POLICY): Verdict {
-  if (c.score >= policy.preRemoveScore) {
-    return {
-      verdict: c.hidden ? "attack" : "suspicious",
-      category: "other",
-      confidence: c.score,
-      reason: c.hidden ? "Hidden text that gives orders to AI assistants." : "Text that seems to give orders to AI assistants.",
-      source: "rules",
-    };
+  if (c.technique === "invisible-unicode" || (c.hidden && c.score >= policy.preRemoveScore)) {
+    return { verdict: "attack", category: "other", confidence: c.score, reason: "Hidden text that gives orders to AI assistants.", source: "rules" };
   }
-  if (c.hidden && c.score >= policy.hiddenCandidateScore) {
-    return { verdict: "suspicious", category: "other", confidence: c.score, reason: "Hidden text that may be aimed at AI assistants.", source: "rules" };
-  }
-  // Without a model we can't judge plain prose, so we leave it alone.
-  return { verdict: "benign", category: "none", confidence: 1 - c.score, reason: "No signs of instructions for AI.", source: "rules" };
+  return { verdict: "benign", category: "none", confidence: 1 - c.score, reason: "Not clearly aimed at AI, and no AI was available to check.", source: "rules" };
 }
 
 /** What to do with a candidate once we have a verdict. */

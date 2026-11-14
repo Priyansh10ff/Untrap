@@ -1,4 +1,10 @@
-import type { Candidate, Finding, ScanResult } from "./types.ts";
+import type { Candidate, Finding, ScanResult, Verdict } from "./types.ts";
+
+/** Reply to a "scan": verdicts we already knew, and the fingerprints still being checked. */
+export interface ScanReply {
+  verdicts: Record<string, Verdict>;
+  queued: string[];
+}
 
 /** Messages between the page, the background worker, the AI engine and the popup. */
 
@@ -43,9 +49,28 @@ export type Msg =
   | { type: "restore" }
   | { type: "get-status" }
   | { type: "engine-status" }
-  | { type: "engine-classify"; url: string; candidates: Candidate[]; settings: Settings }
+  | { type: "engine-classify"; tabId: number; url: string; candidates: Candidate[]; settings: Settings }
+  /** Engine -> background, one per candidate as soon as it's decided. */
+  | { type: "engine-verdict"; tabId: number; url: string; hash: string; verdict: Verdict }
+  /** Background -> page. */
+  | { type: "verdict"; hash: string; verdict: Verdict }
   | { type: "engine-stats"; delta: StatsDelta }
+  /** Runs one known attack through the AI and reports where it ran and how long it took. */
+  | { type: "self-test" }
+  | { type: "engine-self-test" }
   | { type: "get-stats" };
+
+export interface SelfTest {
+  ok: boolean;
+  source?: string;
+  verdict?: string;
+  category?: string;
+  ms?: number;
+  cloudOk?: boolean;
+  cloudMs?: number;
+  error?: string;
+  cloudError?: string;
+}
 
 export interface StatsDelta {
   pages: number;

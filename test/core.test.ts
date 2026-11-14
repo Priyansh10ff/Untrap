@@ -4,7 +4,7 @@ import { buildPrompt, parseVerdict } from "../src/core/prompt.ts";
 import { actionFor, needsSecondOpinion, POLICY, preRemove, rulesVerdict, selectCandidates } from "../src/core/policy.ts";
 import { decodeTagChars, fingerprint, hasInvisibleChars, looksLikeProse, normalize } from "../src/core/text.ts";
 import type { Candidate, Segment, Verdict } from "../src/core/types.ts";
-import { ATTACKS, BENIGN } from "./fixtures.ts";
+import { ATTACKS, BENIGN, VISIBLE_DOCS } from "./fixtures.ts";
 
 const seg = (text: string, hidden: boolean, id = "s1"): Segment => ({ id, text, hidden, technique: hidden ? "display-none" : "visible", where: "<div>" });
 
@@ -104,8 +104,17 @@ describe("decisions", () => {
 
   it("falls back to cautious rules when no model is available", () => {
     expect(rulesVerdict(cand()).verdict).toBe("attack");
-    expect(rulesVerdict(cand({ score: 0.3 })).verdict).toBe("suspicious");
-    expect(rulesVerdict(cand({ score: 0.1 })).verdict).toBe("benign");
+    expect(rulesVerdict(cand({ score: 0.3 })).verdict).toBe("benign");
+    expect(rulesVerdict(cand({ hidden: false, score: 0.6 })).verdict).toBe("benign");
+    expect(rulesVerdict(cand({ hidden: false, score: 0.95 })).verdict).toBe("benign");
+  });
+
+  it("never removes or flags documentation about attacks on rules alone", async () => {
+    for (const text of VISIBLE_DOCS) {
+      const [c] = await selectCandidates([seg(text, false)]);
+      if (!c) continue; // not even sent to the AI: fine
+      expect(actionFor(c, rulesVerdict(c)), text).toBe("kept");
+    }
   });
 });
 

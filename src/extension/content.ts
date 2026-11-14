@@ -2,7 +2,7 @@ import { extractSegments, type SegmentRef } from "../core/extract.ts";
 import { actionFor, preRemove, rulesVerdict, selectCandidates } from "../core/policy.ts";
 import { stripInvisible } from "../core/text.ts";
 import type { Action, Candidate, Finding, ScanResult, Verdict } from "../core/types.ts";
-import { DEFAULT_SETTINGS, type Msg, type Settings, type TabState } from "../core/messages.ts";
+import { DEFAULT_SETTINGS, type Msg, type ScanReply, type Settings, type TabState } from "../core/messages.ts";
 import { hideXray, showXray } from "./xray.ts";
 
 /**
@@ -35,7 +35,10 @@ interface Applied {
 
 const applied = new Map<string, Applied>(); // by piece of page (see keyOf)
 const decided = new Map<string, Verdict>(); // by text fingerprint, survives re-renders
-const inFlight = new Set<string>();
+/** Candidates waiting for the AI, by fingerprint, with every place on the page they appear. */
+const waiting = new Map<string, { c: Candidate; refs: SegmentRef[] }>();
+/** If the engine never answers (extension reloaded, model stuck), the rules decide. */
+const GIVE_UP_MS = 4 * 60_000;
 let findings: Finding[] = [];
 let mode: ScanResult["mode"] = "none";
 let pending = 0;
@@ -85,31 +88,50 @@ async function scan() {
     }
     // Hidden text with strong signals goes right away. People can't see it, so nothing changes for them.
     if (preRemove(c)) apply(c, ref, rulesVerdict(c));
-    if (!inFlight.has(c.hash) && !fresh.some((f) => f.hash === c.hash)) fresh.push(c);
+    const wait = waiting.get(c.hash);
+    if (wait) {
+      wait.refs.push(ref);
+      continue;
+    }
+    waiting.set(c.hash, { c, refs: [ref] });
+    fresh.push(c);
   }
 
-  pending += fresh.length;
+  pending = waiting.size;
   rebuildFindings();
   report();
   if (!fresh.length) return;
 
-  for (const c of fresh) inFlight.add(c.hash);
-  let result: ScanResult | undefined;
+  let reply: ScanReply | undefined;
   try {
-    result = (await chrome.runtime.sendMessage({ type: "scan", url: location.href, candidates: fresh } satisfies Msg)) as ScanResult;
+    reply = (await chrome.runtime.sendMessage({ type: "scan", url: location.href, candidates: fresh } satisfies Msg)) as ScanReply;
   } catch {
-    result = undefined; // extension reloaded or engine unavailable: fall back to the rules
+    reply = undefined; // extension reloaded: fall back to the rules
   }
-  for (const c of fresh) {
-    inFlight.delete(c.hash);
-    decided.set(c.hash, result?.verdicts[c.hash] ?? rulesVerdict(c));
+  if (!reply) {
+    for (const c of fresh) settle(c.hash, rulesVerdict(c));
+    return;
   }
-  for (const { c, ref } of found) {
-    const v = decided.get(c.hash);
-    if (v && fresh.some((f) => f.hash === c.hash)) apply(c, ref, v);
-  }
-  if (result) mode = mergeMode(mode, result.mode);
-  pending = Math.max(0, pending - fresh.length);
+  // Cached verdicts come back at once. The rest arrive one by one as "verdict" messages.
+  for (const [hash, v] of Object.entries(reply.verdicts)) settle(hash, v);
+  const queued = new Set(reply.queued);
+  setTimeout(() => {
+    for (const hash of queued) {
+      const w = waiting.get(hash);
+      if (w) settle(hash, rulesVerdict(w.c));
+    }
+  }, GIVE_UP_MS);
+}
+
+/** A verdict arrived: apply it everywhere that text appears. */
+function settle(hash: string, v: Verdict) {
+  const w = waiting.get(hash);
+  decided.set(hash, v);
+  if (!w) return;
+  waiting.delete(hash);
+  for (const ref of w.refs) apply(w.c, ref, v);
+  if (v.source === "on_device" || v.source === "in_cloud") mode = mergeMode(mode, v.source);
+  pending = waiting.size;
   rebuildFindings();
   report();
 }
@@ -181,13 +203,12 @@ function flag(ref: SegmentRef): () => void {
   if (ref.kind !== "element" || !(ref.el instanceof HTMLElement)) return () => {};
   const el = ref.el;
   const outline = el.style.outline;
-  const title = el.getAttribute("title");
+  // Only an outline: adding text (like a title) would put words on the page that we'd scan ourselves.
   el.style.outline = "2px dashed #f59e0b";
-  el.setAttribute("title", "Untrap: this text seems to speak to AI assistants");
+  el.setAttribute("data-untrap-flagged", "");
   return () => {
     el.style.outline = outline;
-    if (title === null) el.removeAttribute("title");
-    else el.setAttribute("title", title);
+    el.removeAttribute("data-untrap-flagged");
   };
 }
 
@@ -197,7 +218,7 @@ function restoreAll() {
   });
   applied.clear();
   decided.clear();
-  inFlight.clear();
+  waiting.clear();
   pending = 0;
   findings = [];
   mode = "none";
@@ -266,7 +287,10 @@ function watch() {
 }
 
 chrome.runtime.onMessage.addListener((msg: Msg, _sender, reply) => {
-  if (msg.type === "xray") {
+  if (msg.type === "verdict") {
+    settle(msg.hash, msg.verdict);
+    reply({ ok: true });
+  } else if (msg.type === "xray") {
     xrayOn = msg.on;
     if (xrayOn) showXray(findingsWithRefs());
     else hideXray();

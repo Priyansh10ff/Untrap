@@ -22,4 +22,15 @@ export const BENIGN = [
   "The assistant manager will call you back within two business days.",
   "Use code SAVE10 at checkout to get ten percent off your first order.",
   "Our AI-powered search helps you find recipes faster.",
+  // Seen hidden on GitHub: tooltips, mobile copies of a README, diagram source.
+  "Chat with Copilot",
+  "Safe Browsing for AI agents. A Chrome extension that finds and removes hidden prompt-injection traps from web pages before any AI reads them. Gemini Nano checks every page on your device, cloud Gemini confirms the hard cases (Firebase AI Logic), and confirmed attacks join a shared blocklist.",
+  "flowchart LR P[Web page] --> R[1. Find hidden text<br/>rules, ~10 ms] R -->|nothing suspicious| C[Page untouched] R -->|suspicious snippets| B{Shared blocklist<br/>Firestore} B -->|new| N[2. Gemini Nano<br/>on device]",
+];
+
+/** Visible text that discusses attacks. Rules may send it to the AI, but must never act on it alone. */
+export const VISIBLE_DOCS = [
+  "Open chrome://extensions, turn on Developer mode, click Load unpacked and pick the folder.",
+  "Researchers found these live on real sites in 2026: a hidden note asking agents with payment access to send $5,000 through PayPal, a hidden sudo rm -rf aimed at coding agents, and hidden requests to leak API keys (Forcepoint X-Labs).",
+  "Security tip from our editors: attackers sometimes hide phrases like \"ignore all previous instructions\" in web pages to hijack AI assistants.",
 ];

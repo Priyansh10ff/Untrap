@@ -46,6 +46,8 @@ export interface Models {
   hybrid: GenerativeModel;
   /** Used when the person turned cloud checks off: the device only. */
   deviceOnly: GenerativeModel;
+  /** First pass in the cloud, used when Gemini Nano is missing or too slow on this computer. */
+  cloudFast: GenerativeModel;
   /** Second opinion for unsure cases: a larger cloud model. */
   cloud: GenerativeModel;
 }
@@ -66,6 +68,7 @@ export function getModels(): Models | undefined {
       inCloudParams: { model: __FIRST_PASS_CLOUD_MODEL__, generationConfig: json },
     }),
     deviceOnly: getGenerativeModel(ai, { mode: InferenceMode.ONLY_ON_DEVICE, onDeviceParams }),
+    cloudFast: getGenerativeModel(ai, { mode: InferenceMode.ONLY_IN_CLOUD, inCloudParams: { model: __FIRST_PASS_CLOUD_MODEL__, generationConfig: json } }),
     cloud: getGenerativeModel(ai, { mode: InferenceMode.ONLY_IN_CLOUD, inCloudParams: { model: __SECOND_OPINION_MODEL__, generationConfig: json } }),
   };
   return models;

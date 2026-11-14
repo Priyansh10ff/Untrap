@@ -24,12 +24,13 @@ export const RULES: Rule[] = [
       "i",
     ),
   },
-  { name: "names an AI", weight: 0.3, pattern: new RegExp(String.raw`\b${AI_NAMES}\b|\b(?:llm|language model|ai (?:assistant|agent|model|system))s?\b`, "i") },
+  // Just naming an AI is common on normal pages ("Chat with Copilot"), so on its own it's not enough.
+  { name: "names an AI", weight: 0.15, pattern: new RegExp(String.raw`\b${AI_NAMES}\b|\b(?:llm|language model|ai (?:assistant|agent|model|system))s?\b`, "i") },
   {
     name: "overrides instructions",
     weight: 0.6,
     pattern:
-      /\b(?:ignore|disregard|forget|override|bypass|skip)\b[^.\n]{0,40}\b(?:instructions?|prompts?|rules|directions|guidelines|guardrails|context|system message|safety)\b|\b(?:ignore|disregard|forget)\b[^.\n]{0,12}\b(?:the|your) (?:user|human|operator)\b|\bnew (?:instructions?|rules|task)\b|\byou are now\b|\bfrom now on\b|\bsystem prompt\b|\bdeveloper mode\b|\bjailbreak\b/i,
+      /\b(?:ignore|disregard|forget|override|bypass|skip)\b[^.\n]{0,40}\b(?:instructions?|prompts?|rules|directions|guidelines|guardrails|context|system message|safety)\b|\b(?:ignore|disregard|forget)\b[^.\n]{0,12}\b(?:the|your) (?:user|human|operator)\b|\bnew (?:instructions?|rules|task)\b|\byou are now\b|\bfrom now on\b|\bsystem prompt\b|\bjailbreak\b/i,
   },
   {
     name: "fake system markup",

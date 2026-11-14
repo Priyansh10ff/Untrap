@@ -1,6 +1,6 @@
-import { DEFAULT_SETTINGS, EMPTY_STATS, type EngineStatus, type Msg, type Settings, type StatsDelta, type TabState } from "../core/messages.ts";
+import { DEFAULT_SETTINGS, EMPTY_STATS, type EngineStatus, type Msg, type ScanReply, type Settings, type StatsDelta, type TabState } from "../core/messages.ts";
 import { rulesVerdict } from "../core/policy.ts";
-import type { Candidate, ScanResult, Verdict } from "../core/types.ts";
+import type { Candidate, Verdict } from "../core/types.ts";
 
 /**
  * The background worker routes messages: pages ask for verdicts, the popup asks for tab state.
@@ -8,10 +8,11 @@ import type { Candidate, ScanResult, Verdict } from "../core/types.ts";
  * and Firebase alive between pages.
  */
 
-const CACHE_KEY = "verdicts";
+// Bump when the prompt or policy changes, so old verdicts aren't reused.
+const CACHE_KEY = "verdicts-v2";
 const CACHE_MAX = 3000;
 const CACHE_TTL = 7 * 24 * 3600_000;
-const ENGINE_TIMEOUT = 90_000;
+const ENGINE_TIMEOUT = 20_000; // status and stats calls only; verdicts stream in separately
 const STATS_ALARM = "flush-stats";
 
 type CacheEntry = { v: Verdict; t: number };
@@ -66,7 +67,12 @@ async function writeCache(updates: Record<string, Verdict>) {
 
 // ---------- scanning ----------
 
-async function scan(url: string, candidates: Candidate[]): Promise<ScanResult> {
+/**
+ * Answers right away with what we already know. Everything else goes to the engine, which
+ * sends each verdict back as soon as it's ready (see "engine-verdict"), so the page updates
+ * one trap at a time instead of waiting for the slowest one.
+ */
+async function scan(tabId: number, url: string, candidates: Candidate[]): Promise<ScanReply> {
   const s = await settings();
   const cache = await readCache();
   const verdicts: Record<string, Verdict> = {};
@@ -76,20 +82,24 @@ async function scan(url: string, candidates: Candidate[]): Promise<ScanResult> {
     if (hit && Date.now() - hit.t < CACHE_TTL) verdicts[c.hash] = { ...hit.v, source: "cache" };
     else misses.push(c);
   }
-  let mode: ScanResult["mode"] = "none";
+  await countStats(Object.values(verdicts));
   if (misses.length) {
     try {
-      const result = await askEngine<ScanResult>({ type: "engine-classify", url, candidates: misses, settings: s });
-      Object.assign(verdicts, result.verdicts);
-      mode = result.mode;
-      await writeCache(result.verdicts);
+      await ensureEngine();
+      await chrome.runtime.sendMessage({ type: "engine-classify", tabId, url, candidates: misses, settings: s } satisfies Msg);
     } catch (err) {
       console.warn("Untrap engine unavailable, using rules only:", err);
       for (const c of misses) verdicts[c.hash] = rulesVerdict(c);
+      return { verdicts, queued: [] };
     }
   }
-  await countStats(Object.values(verdicts));
-  return { verdicts, mode };
+  return { verdicts, queued: misses.map((c) => c.hash) };
+}
+
+async function onVerdict(tabId: number, hash: string, verdict: Verdict) {
+  await writeCache({ [hash]: verdict });
+  await countStats([verdict]);
+  await chrome.tabs.sendMessage(tabId, { type: "verdict", hash, verdict } satisfies Msg).catch(() => {});
 }
 
 // ---------- stats ----------
@@ -168,7 +178,11 @@ async function updateBadge(tabId: number, state: Omit<TabState, "updatedAt">) {
 chrome.runtime.onMessage.addListener((msg: Msg, sender, reply) => {
   switch (msg.type) {
     case "scan":
-      void scan(msg.url, msg.candidates).then(reply);
+      if (sender.tab?.id === undefined) return false;
+      void scan(sender.tab.id, msg.url, msg.candidates).then(reply);
+      return true;
+    case "engine-verdict":
+      void onVerdict(msg.tabId, msg.hash, msg.verdict).then(() => reply({ ok: true }));
       return true;
     case "report":
       if (sender.tab?.id !== undefined) void saveTabState(sender.tab.id, msg.state).then(() => reply({ ok: true }));
@@ -180,6 +194,12 @@ chrome.runtime.onMessage.addListener((msg: Msg, sender, reply) => {
       void askEngine<EngineStatus>({ type: "engine-status" })
         .then(reply)
         .catch((err: Error) => reply({ onDevice: "unsupported", cloud: false, firebase: false, error: err.message } satisfies EngineStatus));
+      return true;
+    case "self-test":
+      void (async () => {
+        await ensureEngine();
+        return (await chrome.runtime.sendMessage({ type: "engine-self-test" } satisfies Msg)) as unknown;
+      })().then(reply, (err: Error) => reply({ ok: false, error: err.message }));
       return true;
     case "get-stats":
       void chrome.storage.local.get("stats").then((r) => reply(r.stats ?? EMPTY_STATS));
@@ -194,6 +214,7 @@ chrome.tabs.onRemoved.addListener((tabId) => void chrome.storage.session.remove(
 chrome.runtime.onInstalled.addListener(async (details) => {
   const stored = await chrome.storage.local.get("settings");
   if (!stored.settings) await chrome.storage.local.set({ settings: DEFAULT_SETTINGS });
+  await chrome.storage.local.remove("verdicts"); // cache from older versions
   await chrome.alarms.create(STATS_ALARM, { periodInMinutes: 5 });
   if (details.reason === "install") await chrome.tabs.create({ url: chrome.runtime.getURL("welcome.html") });
 });

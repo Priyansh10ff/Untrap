@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, type Settings } from "../core/messages.ts";
+import { DEFAULT_SETTINGS, type Msg, type SelfTest, type Settings } from "../core/messages.ts";
 import { getModels, onDeviceAvailability } from "./firebase.ts";
 
 declare const __SITE_URL__: string;
@@ -93,6 +93,19 @@ async function waitUntilReady() {
     await new Promise((r) => setTimeout(r, 2000));
   }
 }
+
+$("self-test").addEventListener("click", async () => {
+  const out = $("self-test-result");
+  const button = $<HTMLButtonElement>("self-test");
+  button.disabled = true;
+  out.textContent = "Testing… the first on-device check can take up to a minute while the model loads.";
+  const r = (await chrome.runtime.sendMessage({ type: "self-test" } satisfies Msg)) as SelfTest;
+  const where = r.source === "on_device" ? "on this device (Gemini Nano)" : r.source === "in_cloud" ? "in the cloud (Nano wasn't used)" : "";
+  const first = r.ok ? `First check ran ${where} in ${((r.ms ?? 0) / 1000).toFixed(1)}s: ${r.verdict} (${r.category}).` : `First check failed: ${r.error}`;
+  const cloud = r.cloudOk ? ` Cloud second opinion works (${((r.cloudMs ?? 0) / 1000).toFixed(1)}s).` : ` Cloud second opinion failed: ${r.cloudError ?? "no valid verdict"}`;
+  out.textContent = first + cloud;
+  button.disabled = false;
+});
 
 $("cloud").addEventListener("change", (e) => void save({ cloud: (e.target as HTMLInputElement).checked }));
 $("share").addEventListener("change", (e) => void save({ share: (e.target as HTMLInputElement).checked }));
