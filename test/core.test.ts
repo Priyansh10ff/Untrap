@@ -93,6 +93,8 @@ describe("decisions", () => {
     expect(needsSecondOpinion(cand(), v({ verdict: "suspicious" }))).toBe(true);
     expect(needsSecondOpinion(cand({ score: 0.9 }), v({ verdict: "benign" }))).toBe(true);
     expect(needsSecondOpinion(cand({ score: 0.4 }), v({ verdict: "benign" }))).toBe(false);
+    // No rule evidence but the small model says attack (a build comment, say): the cloud must agree.
+    expect(needsSecondOpinion(cand({ score: 0 }), v({ confidence: 0.95 }))).toBe(true);
   });
 
   it("removes hidden text on suspicion but only flags unsure visible text", () => {

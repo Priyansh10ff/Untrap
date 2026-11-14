@@ -161,10 +161,12 @@ async function report(c: Candidate, v: Verdict, url: string) {
   }
 }
 
-/** Worth adding to the shared blocklist: confirmed by the cloud, or the device is very sure. */
+/**
+ * Worth adding to the shared blocklist: only attacks the larger cloud model confirmed. One
+ * on-device mistake must never spread to every Untrap user.
+ */
 function shouldReport(v: Verdict): boolean {
-  if (v.verdict !== "attack") return false;
-  return v.source === "in_cloud" ? v.confidence >= 0.7 : v.source === "on_device" && v.confidence >= 0.9;
+  return v.verdict === "attack" && v.source === "in_cloud" && v.confidence >= 0.7;
 }
 
 /** Checks each candidate and reports its verdict as soon as it's ready. */

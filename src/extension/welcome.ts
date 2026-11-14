@@ -107,6 +107,13 @@ $("self-test").addEventListener("click", async () => {
   button.disabled = false;
 });
 
+$("clear-cache").addEventListener("click", async () => {
+  const button = $<HTMLButtonElement>("clear-cache");
+  await chrome.runtime.sendMessage({ type: "clear-cache" } satisfies Msg);
+  button.textContent = "Done";
+  setTimeout(() => (button.textContent = "Forget"), 2000);
+});
+
 $("cloud").addEventListener("change", (e) => void save({ cloud: (e.target as HTMLInputElement).checked }));
 $("share").addEventListener("change", (e) => void save({ share: (e.target as HTMLInputElement).checked }));
 $("clear-paused").addEventListener("click", () => void save({ paused: [] }));

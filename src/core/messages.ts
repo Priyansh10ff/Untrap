@@ -57,6 +57,8 @@ export type Msg =
   | { type: "engine-stats"; delta: StatsDelta }
   /** Runs one known attack through the AI and reports where it ran and how long it took. */
   | { type: "self-test" }
+  /** Forget verdicts saved on this computer, so every page is checked again from scratch. */
+  | { type: "clear-cache" }
   | { type: "engine-self-test" }
   | { type: "get-stats" };
 

@@ -67,7 +67,12 @@ export function preRemove(c: Candidate, policy: Policy = POLICY): boolean {
 /** Should an on-device verdict get a second opinion from the cloud? */
 export function needsSecondOpinion(c: Candidate, v: Verdict, policy: Policy = POLICY): boolean {
   if (v.verdict === "suspicious") return true;
-  if (v.verdict === "attack") return v.confidence < policy.confidentAttack;
+  if (v.verdict === "attack") {
+    // No rule found anything, yet the small model says attack: the cloud has to agree first.
+    // Gemini Nano can over-read "hidden" as "malicious" (for example a plain build comment).
+    if (c.score < policy.hiddenCandidateScore && c.technique !== "invisible-unicode") return true;
+    return v.confidence < policy.confidentAttack;
+  }
   // The device said benign. Double-check only when the rules strongly disagree.
   return c.hidden && c.score >= policy.rulesDisagree;
 }
