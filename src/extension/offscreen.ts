@@ -2,6 +2,7 @@ import { doc, getDoc, getFirestore, increment, serverTimestamp, setDoc, type Fir
 import type { GenerativeModel } from "firebase/ai";
 import { buildCompactPrompt, buildPrompt, makeNonce, parseVerdict } from "../core/prompt.ts";
 import { needsSecondOpinion, rulesVerdict } from "../core/policy.ts";
+import { ground } from "../core/ground.ts";
 import { CATEGORIES, type Candidate, type Verdict } from "../core/types.ts";
 import type { EngineStatus, Msg, SelfTest, Settings, StatsDelta } from "../core/messages.ts";
 import { getToken } from "firebase/app-check";
@@ -69,7 +70,9 @@ async function ask(model: GenerativeModel, c: Candidate, opts: { compact: boolea
   const prompt = (opts.compact ? buildCompactPrompt : buildPrompt)(c, { maxChars: opts.maxChars, nonce: makeNonce() });
   const result = await withTimeout(model.generateContent(prompt), opts.timeout);
   const source = result.response.inferenceSource === "on_device" ? "on_device" : "in_cloud";
-  return parseVerdict(result.response.text(), source);
+  const v = parseVerdict(result.response.text(), source);
+  // Every attack has to quote a real order from the text, or it's turned into "benign".
+  return v ? ground(c, v) : null;
 }
 
 // ---------- on-device health ----------
@@ -180,7 +183,7 @@ async function classify(tabId: number, url: string, candidates: Candidate[], set
   await Promise.all(
     candidates.map(async (c) => {
       const known = blocked.get(c.hash);
-      if (known) return send(c.hash, known);
+      if (known) return send(c.hash, ground(c, known));
       let v: Verdict | null = null;
       try {
         v = await firstPass(c, settings);

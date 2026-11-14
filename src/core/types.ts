@@ -74,6 +74,10 @@ export interface Verdict {
   /** One short sentence for people. */
   reason: string;
   source: VerdictSource;
+  /** The exact words in the text that give the AI an order (checked to be really there). */
+  instruction?: string;
+  /** For cached verdicts: which layer decided originally. */
+  from?: VerdictSource;
 }
 
 export type Action = "removed" | "flagged" | "kept";

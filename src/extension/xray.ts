@@ -103,7 +103,7 @@ export function showXray(items: { finding: Finding; ref: SegmentRef }[]) {
     where.className = "where";
     where.textContent = `${TECHNIQUE_LABELS[c.technique] ?? c.technique} · ${c.attr ? `${c.where} ${c.attr}` : c.where}`;
     const quote = document.createElement("blockquote");
-    quote.textContent = clip(c.text, 280);
+    renderQuote(quote, c.text, v.instruction);
     const reason = document.createElement("p");
     reason.className = "reason";
     reason.textContent = v.reason;
@@ -116,6 +116,21 @@ export function showXray(items: { finding: Finding; ref: SegmentRef }[]) {
   });
   root.appendChild(panel);
   document.documentElement.appendChild(host);
+}
+
+/** Shows the hidden text, with the exact order to the AI highlighted when we know it. */
+function renderQuote(el: HTMLElement, text: string, instruction?: string) {
+  const at = instruction ? text.toLowerCase().indexOf(instruction.toLowerCase()) : -1;
+  if (!instruction || at < 0) {
+    el.textContent = clip(text, 280);
+    return;
+  }
+  // Keep some context around the order, clipped if the text is long.
+  const from = Math.max(0, at - 80);
+  const to = Math.min(text.length, at + instruction.length + 80);
+  const mark = document.createElement("mark");
+  mark.textContent = text.slice(at, at + instruction.length);
+  el.append(`${from > 0 ? "…" : ""}${text.slice(from, at)}`, mark, `${text.slice(at + instruction.length, to)}${to < text.length ? "…" : ""}`);
 }
 
 const hasBox = (el: Element) => {
@@ -187,4 +202,5 @@ li.flagged .num { background: #f59e0b; }
 .where { margin-top: 4px; font-size: 12px; color: #64748b; }
 blockquote { margin: 8px 0 0; padding: 8px 10px; background: #fff; border-radius: 8px; border: 1px dashed #fda4af; font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; color: #881337; word-break: break-word; }
 .reason { margin: 6px 0 0; font-size: 12px; color: #475569; }
+mark { background: #fecdd3; color: #881337; border-radius: 3px; padding: 0 2px; font-weight: 600; }
 `;

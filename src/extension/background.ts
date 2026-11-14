@@ -9,7 +9,7 @@ import type { Candidate, Verdict } from "../core/types.ts";
  */
 
 // Bump when the prompt or policy changes, so old verdicts aren't reused.
-const CACHE_KEY = "verdicts-v3";
+const CACHE_KEY = "verdicts-v4";
 const CACHE_MAX = 3000;
 const CACHE_TTL = 7 * 24 * 3600_000;
 const ENGINE_TIMEOUT = 20_000; // status and stats calls only; verdicts stream in separately
@@ -79,7 +79,7 @@ async function scan(tabId: number, url: string, candidates: Candidate[]): Promis
   const misses: Candidate[] = [];
   for (const c of candidates) {
     const hit = cache[c.hash];
-    if (hit && Date.now() - hit.t < CACHE_TTL) verdicts[c.hash] = { ...hit.v, source: "cache" };
+    if (hit && Date.now() - hit.t < CACHE_TTL) verdicts[c.hash] = { ...hit.v, source: "cache", from: hit.v.from ?? hit.v.source };
     else misses.push(c);
   }
   await countStats(Object.values(verdicts));
@@ -217,7 +217,7 @@ chrome.tabs.onRemoved.addListener((tabId) => void chrome.storage.session.remove(
 chrome.runtime.onInstalled.addListener(async (details) => {
   const stored = await chrome.storage.local.get("settings");
   if (!stored.settings) await chrome.storage.local.set({ settings: DEFAULT_SETTINGS });
-  await chrome.storage.local.remove(["verdicts", "verdicts-v2"]); // caches from older versions
+  await chrome.storage.local.remove(["verdicts", "verdicts-v2", "verdicts-v3"]); // caches from older versions
   await chrome.alarms.create(STATS_ALARM, { periodInMinutes: 5 });
   if (details.reason === "install") await chrome.tabs.create({ url: chrome.runtime.getURL("welcome.html") });
 });

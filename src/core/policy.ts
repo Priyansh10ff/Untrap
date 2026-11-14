@@ -67,6 +67,8 @@ export function preRemove(c: Candidate, policy: Policy = POLICY): boolean {
 /** Should an on-device verdict get a second opinion from the cloud? */
 export function needsSecondOpinion(c: Candidate, v: Verdict, policy: Policy = POLICY): boolean {
   if (v.verdict === "suspicious") return true;
+  // People can see visible text, so removing it on the small model's word alone is too costly.
+  if (v.verdict === "attack" && !c.hidden && v.source === "on_device") return true;
   if (v.verdict === "attack") {
     // No rule found anything, yet the small model says attack: the cloud has to agree first.
     // Gemini Nano can over-read "hidden" as "malicious" (for example a plain build comment).
@@ -93,5 +95,8 @@ export function rulesVerdict(c: Candidate, policy: Policy = POLICY): Verdict {
 export function actionFor(c: Candidate, v: Verdict): Action {
   if (v.verdict === "benign") return "kept";
   if (c.hidden) return "removed";
+  // Visible text is only removed once the cloud (or the shared blocklist) has confirmed it.
+  const decidedBy = v.source === "cache" ? v.from : v.source;
+  if (decidedBy === "on_device" || decidedBy === "rules") return "flagged";
   return v.verdict === "attack" && v.confidence >= 0.6 ? "removed" : "flagged";
 }
