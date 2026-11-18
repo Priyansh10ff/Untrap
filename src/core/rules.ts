@@ -13,14 +13,14 @@ interface Rule {
 }
 
 const AI_NAMES = String.raw`(?:chat ?gpt|gpt-?\d|openai|claude|anthropic|gemini|bard|copilot|perplexity|llama|mistral|grok|deepseek)`;
-const AI_WORDS = String.raw`(?:ai|a\.i\.|llm|large language model|language model|ai (?:assistant|agent|model|system|bot)|assistant|agent|chatbot|bot)`;
+const AI_WORDS = String.raw`(?:ai|a\.i\.|llm|large language model|language model|ai (?:assistant|agent|model|system|bot|summari[sz]er|crawler)|assistant|agent|chatbot|bot|model|summari[sz]er|crawler)`;
 
 export const RULES: Rule[] = [
   {
     name: "speaks to AI",
     weight: 0.6,
     pattern: new RegExp(
-      String.raw`\b(?:if you(?:'re| are) an? ${AI_WORDS}|(?:dear|attention|note to|hey|hello)[,:]? ${AI_WORDS}|(?:any|all) ${AI_WORDS}s? (?:reading|processing|summari[sz]ing|visiting)|${AI_WORDS}s? (?:reading|processing|summari[sz]ing|browsing) this|to (?:the|any) ${AI_WORDS} (?:reading|that))`,
+      String.raw`\b(?:if you(?:'re| are) an? ${AI_WORDS}|(?:dear|attention|note (?:to|for)|message (?:to|for)|hey|hello|hi)[,:]? (?:any |all |the )?${AI_WORDS}s?|(?:any|all) ${AI_WORDS}s? (?:reading|processing|summari[sz]ing|visiting)|${AI_WORDS}s? (?:reading|processing|summari[sz]ing|browsing) this|to (?:the|any) ${AI_WORDS}s? (?:reading|that))|^\s*(?:ai|llm|agent|assistant|model|bot)s?\s*[:,]|\b(?:ai|llm|agent|assistant|model)s? (?:instructions?|note|notice|task|directive)s?\b`,
       "i",
     ),
   },
@@ -73,7 +73,7 @@ export const RULES: Rule[] = [
     name: "bends the answer",
     weight: 0.35,
     pattern:
-      /\b(?:when|while|if)\b[^.\n]{0,10}\b(?:summari[sz]ing|answering|responding|replying|describing|reviewing|ranking|recommending)\b|\bin (?:your|the) (?:summary|answer|response|reply|review|output)\b|\b(?:always|only) (?:recommend|rank|rate|say|describe|mention)\b|\b(?:describe|rate|rank|call|present)\b[^.\n]{0,40}\bas (?:the best|the top|#1|number one|5 stars|five stars|excellent|trustworthy)\b/i,
+      /\b(?:when|while|if)\b[^.\n]{0,10}\b(?:summari[sz]ing|answering|responding|replying|describing|reviewing|ranking|recommending|asked)\b|\b(?:when|while|if)\b[^.\n]{0,25}\b(?:is|are|gets?) (?:described|summari[sz]ed|reviewed|translated|compared|ranked)\b|\b(?:rank|list|put|show)\b[^.\n]{0,30}\bfirst\b[^.\n]{0,15}\b(?:in|among)\b|\bin (?:your|the) (?:summary|answer|response|reply|review|output)\b|\b(?:always|only) (?:recommend|rank|rate|say|describe|mention)\b|\b(?:describe|rate|rank|call|present)\b[^.\n]{0,40}\bas (?:the best|the top|#1|number one|5 stars|five stars|excellent|trustworthy)\b/i,
   },
   {
     name: "orders the model",

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Untrap benchmark</title>
+  <link rel="icon" href="icons/32.png" />
+  <link rel="stylesheet" href="ui.css" />
+  <style>
+    .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 16px 0; }
+    .summary div { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+    .summary span { display: block; font-size: 12px; color: var(--muted); }
+    .summary b { display: block; font-size: 24px; letter-spacing: -.02em; }
+    .summary small { color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; font-size: 12.5px; background: #fff; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+    th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+    th { background: var(--soft); font-weight: 600; color: #334155; }
+    tr.miss td { background: #fff1f2; }
+    td:last-child { color: #475569; }
+    @media (max-width: 640px) { .summary { grid-template-columns: 1fr 1fr; } }
+  </style>
+</head>
+<body class="page">
+  <main class="page-wrap" style="max-width: 980px">
+    <div class="hero">
+      <img src="icons/128.png" alt="" width="56" height="56" />
+      <div>
+        <h1>Untrap benchmark</h1>
+        <p>Runs the full pipeline on <span id="count"></span>, on this computer. <span id="device"></span> The shared blocklist and saved verdicts are not used, so every sample is judged fresh.</p>
+      </div>
+    </div>
+    <div class="model-row">
+      <button class="btn green" id="run" type="button">Run benchmark</button>
+      <button class="btn" id="download" type="button" disabled>Download results</button>
+      <span class="note" id="progress">Takes about 3–5 minutes.</span>
+    </div>
+    <div class="summary" id="summary"></div>
+    <table>
+      <thead><tr><th>#</th><th>Expected</th><th>Got</th><th>Decided by</th><th>2nd opinion</th><th>Time</th><th></th><th>Text</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </main>
+  <script type="module" src="bench.js"></script>
+</body>
+</html>

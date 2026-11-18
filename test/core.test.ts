@@ -6,6 +6,8 @@ import { decodeTagChars, fingerprint, hasInvisibleChars, looksLikeProse, normali
 import type { Candidate, Segment, Verdict } from "../src/core/types.ts";
 import { ATTACKS, BENIGN, VISIBLE_DOCS } from "./fixtures.ts";
 import { findQuote, ground, looksLikeOrder } from "../src/core/ground.ts";
+import { SAMPLES } from "../src/bench/samples.ts";
+import { score } from "../src/bench/metrics.ts";
 
 const seg = (text: string, hidden: boolean, id = "s1"): Segment => ({ id, text, hidden, technique: hidden ? "display-none" : "visible", where: "<div>" });
 
@@ -205,5 +207,37 @@ describe("grounding", () => {
 
   it("checks every Attack Lab style attack as an order", () => {
     for (const text of ATTACKS) expect(looksLikeOrder(text), text).toBe(true);
+  });
+});
+
+describe("benchmark set", () => {
+  it("has unique ids and both labels", () => {
+    expect(new Set(SAMPLES.map((s) => s.id)).size).toBe(SAMPLES.length);
+    expect(SAMPLES.some((s) => s.label === "attack") && SAMPLES.some((s) => s.label === "benign")).toBe(true);
+  });
+
+  it("never removes harmless samples on rules alone", async () => {
+    for (const s of SAMPLES.filter((x) => x.label === "benign")) {
+      const [c] = await selectCandidates([{ id: s.id, text: s.text, technique: s.technique, hidden: s.hidden, where: "b" }]);
+      if (c) expect(preRemove(c), s.id).toBe(false);
+    }
+  });
+
+  it("sends every attack to the AI (nothing slips past the rules filter)", async () => {
+    const skipped: string[] = [];
+    for (const s of SAMPLES.filter((x) => x.label === "attack")) {
+      const [c] = await selectCandidates([{ id: s.id, text: s.text, technique: s.technique, hidden: s.hidden, where: "b" }]);
+      if (!c) skipped.push(s.id);
+    }
+    expect(skipped).toEqual([]);
+  });
+
+  it("scores outcomes", () => {
+    const s = score([
+      { id: "1", expected: "attack", predicted: "attack", decidedBy: "on_device" },
+      { id: "2", expected: "benign", predicted: "attack", decidedBy: "in_cloud" },
+      { id: "3", expected: "benign", predicted: "benign", decidedBy: "filtered" },
+    ]);
+    expect(s).toMatchObject({ tp: 1, fp: 1, tn: 1, fn: 0, precision: 0.5, recall: 1, onDeviceShare: 0.5 });
   });
 });

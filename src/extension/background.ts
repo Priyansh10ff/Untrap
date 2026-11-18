@@ -201,6 +201,12 @@ chrome.runtime.onMessage.addListener((msg: Msg, sender, reply) => {
         return (await chrome.runtime.sendMessage({ type: "engine-self-test" } satisfies Msg)) as unknown;
       })().then(reply, (err: Error) => reply({ ok: false, error: err.message }));
       return true;
+    case "bench-judge":
+      void (async () => {
+        await ensureEngine();
+        return chrome.runtime.sendMessage({ type: "engine-judge", candidate: msg.candidate, settings: msg.settings } satisfies Msg);
+      })().then(reply, (err: Error) => reply({ error: err.message }));
+      return true;
     case "clear-cache":
       void chrome.storage.local.remove(CACHE_KEY).then(() => reply({ ok: true }));
       return true;

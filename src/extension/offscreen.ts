@@ -172,11 +172,33 @@ function shouldReport(v: Verdict): boolean {
   return v.verdict === "attack" && v.source === "in_cloud" && v.confidence >= 0.7;
 }
 
+/** The full AI judgement for one candidate: first pass, then a cloud second opinion if needed. */
+async function judge(c: Candidate, settings: Settings): Promise<{ verdict: Verdict; firstSource?: string; secondOpinion: boolean }> {
+  const models = getModels();
+  let v: Verdict | null = null;
+  try {
+    v = await firstPass(c, settings);
+  } catch (err) {
+    console.warn("Untrap: first pass failed", err);
+  }
+  const firstSource = v?.source;
+  let secondOpinion = false;
+  // Second opinion from a larger cloud model when the device is unsure.
+  if (v && v.source === "on_device" && settings.cloud && models && needsSecondOpinion(c, v)) {
+    secondOpinion = true;
+    try {
+      v = (await limited(() => ask(models.cloud, c, { compact: false, maxChars: CLOUD_CHARS, timeout: SECOND_OPINION_TIMEOUT }))) ?? v;
+    } catch (err) {
+      console.warn("Untrap: second opinion failed", err);
+    }
+  }
+  return { verdict: v ?? rulesVerdict(c), firstSource, secondOpinion };
+}
+
 /** Checks each candidate and reports its verdict as soon as it's ready. */
 async function classify(tabId: number, url: string, candidates: Candidate[], settings: Settings) {
   const send = (hash: string, verdict: Verdict) =>
     chrome.runtime.sendMessage({ type: "engine-verdict", tabId, url, hash, verdict } satisfies Msg).catch(() => {});
-  const models = getModels();
   const blocked = settings.share ? await lookupBlocklist(candidates) : new Map<string, Verdict>();
 
   // On-device checks queue inside firstPass; cloud checks run side by side.
@@ -184,23 +206,9 @@ async function classify(tabId: number, url: string, candidates: Candidate[], set
     candidates.map(async (c) => {
       const known = blocked.get(c.hash);
       if (known) return send(c.hash, ground(c, known));
-      let v: Verdict | null = null;
-      try {
-        v = await firstPass(c, settings);
-      } catch (err) {
-        console.warn("Untrap: first pass failed", err);
-      }
-      // Second opinion from a larger cloud model when the device is unsure.
-      if (v && v.source === "on_device" && settings.cloud && models && needsSecondOpinion(c, v)) {
-        try {
-          v = (await limited(() => ask(models.cloud, c, { compact: false, maxChars: CLOUD_CHARS, timeout: SECOND_OPINION_TIMEOUT }))) ?? v;
-        } catch (err) {
-          console.warn("Untrap: second opinion failed", err);
-        }
-      }
-      v ??= rulesVerdict(c);
-      await send(c.hash, v);
-      if (settings.share && shouldReport(v)) void report(c, v, url);
+      const { verdict } = await judge(c, settings);
+      await send(c.hash, verdict);
+      if (settings.share && shouldReport(verdict)) void report(c, verdict, url);
     }),
   );
 }
@@ -300,6 +308,12 @@ chrome.runtime.onMessage.addListener((msg: Msg, _sender, reply) => {
     case "engine-status":
       void status().then(reply);
       return true;
+    case "engine-judge": {
+      // Used by the benchmark page: one candidate, no blocklist, timed.
+      const t0 = performance.now();
+      void judge(msg.candidate, msg.settings).then((r) => reply({ ...r, ms: Math.round(performance.now() - t0) }));
+      return true;
+    }
     case "engine-self-test":
       void selfTest().then(reply);
       return true;

@@ -57,6 +57,9 @@ export type Msg =
   | { type: "engine-stats"; delta: StatsDelta }
   /** Runs one known attack through the AI and reports where it ran and how long it took. */
   | { type: "self-test" }
+  /** Benchmark: judge one candidate with the full AI pipeline (no blocklist, no cache). */
+  | { type: "bench-judge"; candidate: Candidate; settings: Settings }
+  | { type: "engine-judge"; candidate: Candidate; settings: Settings }
   /** Forget verdicts saved on this computer, so every page is checked again from scratch. */
   | { type: "clear-cache" }
   | { type: "engine-self-test" }
@@ -74,6 +77,13 @@ export interface SelfTest {
   cloudError?: string;
   appCheck?: string;
   fastCloud?: string;
+}
+
+export interface JudgeResult {
+  verdict: Verdict;
+  firstSource?: string;
+  secondOpinion: boolean;
+  ms: number;
 }
 
 export interface StatsDelta {

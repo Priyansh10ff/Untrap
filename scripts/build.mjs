@@ -53,7 +53,7 @@ const site = join(dist, "site");
 cpSync(join(root, "src/site/static"), site, { recursive: true });
 
 const builds = [
-  { ...common, entryPoints: { background: "src/extension/background.ts", offscreen: "src/extension/offscreen.ts", popup: "src/extension/popup.ts", welcome: "src/extension/welcome.ts" }, outdir: ext, format: "esm" },
+  { ...common, entryPoints: { background: "src/extension/background.ts", offscreen: "src/extension/offscreen.ts", popup: "src/extension/popup.ts", welcome: "src/extension/welcome.ts", bench: "src/extension/bench.ts" }, outdir: ext, format: "esm" },
   // Content scripts can't be modules.
   { ...common, entryPoints: { content: "src/extension/content.ts" }, outdir: ext, format: "iife" },
   { ...common, entryPoints: { "assets/site": "src/site/site.ts" }, outdir: site, format: "esm", target: "es2022" },
