@@ -1,6 +1,7 @@
 import type { Action, Candidate, Segment, Verdict } from "./types.ts";
 import { scoreText } from "./rules.ts";
 import { fingerprint, looksLikeProse, normalize } from "./text.ts";
+import { looksLikeOrder } from "./ground.ts";
 
 /**
  * The decisions that turn rule scores and model verdicts into actions. Tuned for one asymmetry:
@@ -21,8 +22,8 @@ export const POLICY = {
   maxCandidates: 20,
   /** An on-device "attack" below this confidence gets a second opinion from the cloud. */
   confidentAttack: 0.75,
-  /** Rules this sure about hidden text get a cloud second opinion if the device says benign. */
-  rulesDisagree: 0.8,
+  /** Rules this sure get a cloud second opinion if the device says benign. */
+  rulesDisagree: 0.5,
 };
 
 export type Policy = typeof POLICY;
@@ -67,17 +68,24 @@ export function preRemove(c: Candidate, policy: Policy = POLICY): boolean {
 /** Should an on-device verdict get a second opinion from the cloud? */
 export function needsSecondOpinion(c: Candidate, v: Verdict, policy: Policy = POLICY): boolean {
   if (v.verdict === "suspicious") return true;
-  // People can see visible text, so removing it on the small model's word alone is too costly.
-  if (v.verdict === "attack" && !c.hidden && v.source === "on_device") return true;
   if (v.verdict === "attack") {
-    // No rule found anything, yet the small model says attack: the cloud has to agree first.
-    // Gemini Nano can over-read "hidden" as "malicious" (for example a plain build comment).
-    if (c.score < policy.hiddenCandidateScore && c.technique !== "invisible-unicode") return true;
+    // People can see visible text, so removing it on the small model's word alone is too costly.
+    if (!c.hidden && v.source === "on_device") return true;
+    if (c.technique === "invisible-unicode") return false; // smuggled text is never legitimate
+    // Weak evidence: nothing aims the text at an AI or asks for anything dangerous, yet the
+    // small model says attack (a build comment, "You must enter a valid email"). The cloud decides.
+    if (!c.signals.some((s) => RISKY_SIGNALS.has(s))) return true;
     return v.confidence < policy.confidentAttack;
   }
-  // The device said benign. Double-check only when the rules strongly disagree.
-  return c.hidden && c.score >= policy.rulesDisagree;
+  // The device said benign. Quiet, polite attacks are where Gemini Nano slips, so double-check
+  // when the rules disagree, or when hidden text speaks to an AI or reads like an order.
+  if (v.source !== "on_device") return false;
+  if (c.score >= policy.rulesDisagree) return true;
+  return c.hidden && (c.signals.includes("speaks to AI") || looksLikeOrder(c.text));
 }
+
+/** Signals that aim text at an AI or ask for something dangerous. */
+const RISKY_SIGNALS = new Set(["speaks to AI", "overrides instructions", "fake system markup", "keep it from the user", "asks for secrets", "data leak link", "wants money moved", "runs commands", "sends the agent elsewhere", "bends the answer", "blocks the answer"]);
 
 /**
  * The verdict we use when no model is available. Without AI we can't tell an article about

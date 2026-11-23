@@ -10,9 +10,9 @@ import { normalize } from "./text.ts";
  */
 
 const ORDER_START =
-  /^(?:please\s+)?(?:ignore|disregard|forget|override|bypass|skip|send|email|e-mail|post|upload|forward|transfer|pay|donate|wire|include|append|add|insert|reveal|print|output|share|leak|exfiltrate|run|execute|delete|remove|install|download|open|visit|go to|navigate|click|redirect|tell|say|respond|reply|answer|write|describe|summari[sz]e|recommend|rate|rank|present|mention|buy|purchase|refuse|stop|act as|pretend|confirm|verify|complete|fill|submit|copy|paste|call|contact|subscribe|approve)\b/i;
+  /^(?:please\s+)?(?:ignore|disregard|forget|override|bypass|skip|send|email|e-mail|post|upload|forward|transfer|pay|donate|wire|include|append|add|insert|reveal|print|output|share|leak|exfiltrate|run|execute|delete|remove|install|download|open|visit|go to|navigate|click|redirect|tell|say|respond|reply|answer|write|describe|summari[sz]e|recommend|rate|rank|present|mention|buy|purchase|refuse|stop|act as|pretend|confirm|verify|complete|fill|submit|copy|paste|call|contact|subscribe|approve|book|reserve|order|use|grant|accept|allow|enable|disable|change|set|update|reset|unsubscribe|sign up|register|log ?in)\b/i;
 const ORDER_ANYWHERE =
-  /\b(?:you must|you should|you will|you need to|you are required to|you have to|make sure (?:you|to)|be sure to|do not|don't|never (?:tell|mention|reveal|say)|always (?:say|recommend|mention|describe))\b/i;
+  /\b(?:you must|you should|you will|you need to|you are required to|you have to|make sure (?:you|to)|be sure to|do not|don't|never (?:tell|mention|reveal|say)|always (?:say|recommend|mention|describe)|(?:must|should|shall) (?:state|say|mention|claim|describe|recommend|include|report|call))\b/i;
 const STRONG_SIGNALS = new Set(["speaks to AI", "overrides instructions", "fake system markup", "keep it from the user", "asks for secrets", "data leak link", "wants money moved", "runs commands", "sends the agent elsewhere", "bends the answer", "orders the model", "blocks the answer"]);
 
 /** True if the text contains something phrased as an order, rather than a statement. */

@@ -20,7 +20,7 @@ export const RULES: Rule[] = [
     name: "speaks to AI",
     weight: 0.6,
     pattern: new RegExp(
-      String.raw`\b(?:if you(?:'re| are) an? ${AI_WORDS}|(?:dear|attention|note (?:to|for)|message (?:to|for)|hey|hello|hi)[,:]? (?:any |all |the )?${AI_WORDS}s?|(?:any|all) ${AI_WORDS}s? (?:reading|processing|summari[sz]ing|visiting)|${AI_WORDS}s? (?:reading|processing|summari[sz]ing|browsing) this|to (?:the|any) ${AI_WORDS}s? (?:reading|that))|^\s*(?:ai|llm|agent|assistant|model|bot)s?\s*[:,]|\b(?:ai|llm|agent|assistant|model)s? (?:instructions?|note|notice|task|directive)s?\b`,
+      String.raw`\b(?:if you(?:'re| are) an? ${AI_WORDS}|(?:dear|attention|note (?:to|for)|message (?:to|for)|hey|hello|hi)[,:]? (?:any |all |the )?${AI_WORDS}s?|(?:any|all) ${AI_WORDS}s? (?:reading|processing|summari[sz]ing|visiting)|${AI_WORDS}s? (?:reading|processing|summari[sz]ing|browsing) this|to (?:the|any) ${AI_WORDS}s? (?:reading|that))|^\s*(?:(?:ai|llm)\s+)?(?:ai|llm|agent|assistant|model|bot)s?\s*[:,]|\b(?:ai|llm|agent|assistant|model)s? (?:instructions?|note|notice|task|directive)s?\b`,
       "i",
     ),
   },
@@ -55,7 +55,7 @@ export const RULES: Rule[] = [
     name: "wants money moved",
     weight: 0.5,
     pattern:
-      /\bpaypal\.me\/|\bvenmo\.com\/|\bcash\.app\/|\bbuy\.stripe\.com\/|\b(?:send|transfer|wire|pay|donate)\b[^.\n]{0,30}(?:\$|usd|€|£|₹|\b\d[\d,.]*\s*(?:dollars|usd|btc|eth|usdc))|\b0x[a-f0-9]{40}\b|\bbc1[a-z0-9]{25,}\b/i,
+      /\bpaypal\.me\/|\bvenmo\.com\/|\bcash\.app\/|\bbuy\.stripe\.com\/|\b(?:send|transfer|wire|pay|donate)\b[^.\n]{0,30}(?:\$|usd|€|£|₹|\b\d[\d,.]*\s*(?:dollars|usd|btc|eth|usdc))|\b0x[a-f0-9]{40}\b|\bbc1[a-z0-9]{25,}\b|\b(?:card|payment method|wallet) on file\b|\bsaved (?:card|payment)\b|\bstored (?:card|payment)\b/i,
   },
   {
     name: "runs commands",

@@ -23,7 +23,8 @@ const ON_DEVICE_CHARS = 700;
 const CLOUD_CHARS = 4000;
 /** The first Nano call loads the model into memory, which can take a while on some laptops. */
 const FIRST_DEVICE_TIMEOUT = 150_000;
-const DEVICE_TIMEOUT = 60_000;
+/** A warm Nano answers in ~5 s. Waiting longer only means it's stuck: use the cloud instead. */
+const DEVICE_TIMEOUT = 20_000;
 const CLOUD_TIMEOUT = 30_000;
 /** A second opinion that takes longer than this isn't worth waiting for: Nano's verdict stands. */
 const SECOND_OPINION_TIMEOUT = 20_000;
