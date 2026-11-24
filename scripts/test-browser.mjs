@@ -53,7 +53,9 @@ const TRAPS = {
 };
 const HARMLESS = ["Skip to main content", "Rating: 4.5 out of 5", "Sleep systems", "Theme by Example Studio", "Please turn on JavaScript", "Security tip from our editors"];
 // These are fine to send to the model (it should call them benign) but must not be removed by rules alone.
-const MODEL_DECIDES = new Set(["Theme by Example Studio", "Security tip from our editors"]);
+// Hidden prose goes to the AI whatever the rules say (they can't read every language or phrasing),
+// so the noscript notice is checked by the model too.
+const MODEL_DECIDES = new Set(["Theme by Example Studio", "Security tip from our editors", "Please turn on JavaScript"]);
 
 const browser = await chromium.launch();
 let failures = 0;

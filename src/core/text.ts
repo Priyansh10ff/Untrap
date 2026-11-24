@@ -52,10 +52,40 @@ export function clip(text: string, max: number): string {
   return `${space > max * 0.6 ? cut.slice(0, space) : cut}…`;
 }
 
-/** Rough check that a string reads like language rather than code, ids or numbers. */
+/** Rough check that a string reads like language rather than code, ids or numbers. Any script. */
 export function looksLikeProse(text: string): boolean {
   const t = normalize(text);
   if (t.length < 20) return false;
-  const words = t.split(" ").filter((w) => /[a-z]{2,}/i.test(w));
-  return words.length >= 5 && words.length / t.split(" ").length > 0.5;
+  const all = t.split(" ");
+  const words = all.filter((w) => /\p{L}{2,}|\p{L}\p{M}/u.test(w));
+  return words.length >= 5 && words.length / all.length > 0.5;
+}
+
+// Common short words. Words shared between languages ("a", "de", "en", "no", "die") are left out.
+const ENGLISH_WORDS = new Set("the to of and or is are be you your this that it in on for with from at as by not if all any we our can will please has have was were".split(" "));
+const OTHER_WORDS = new Set(
+  [
+    "el los las del por con para una que es y su sus lo al ignora envía envia usted", // Spanish
+    "le les des du et est une pour dans qui pas vous votre sur avec ce cette", // French
+    "der das und ist nicht mit für sie ein eine zu den dem auf ich wir ihr", // German
+    "os um uma não você seu sua com para do da dos das ao", // Portuguese
+    "il gli che è per non della delle sono questo", // Italian
+    "het een van niet je jouw voor met zijn", // Dutch
+    "dan yang untuk tidak anda ini itu dengan", // Indonesian
+  ].join(" ").split(" "),
+);
+
+/**
+ * True unless the text is clearly in another language. The rule patterns and order checks are
+ * English, so text in other languages is left to the AI (and the cloud double-checks it).
+ * Text without many function words (menus, labels) counts as English.
+ */
+export function isMostlyEnglish(text: string): boolean {
+  const words = normalize(text).toLowerCase().split(/[^\p{L}\p{M}']+/u).filter(Boolean);
+  if (!words.length) return true;
+  const latin = words.filter((w) => /^[a-z\u00c0-\u024f']+$/.test(w)).length;
+  if (latin / words.length < 0.6) return false; // mostly another script
+  const english = words.filter((w) => ENGLISH_WORDS.has(w)).length;
+  const other = words.filter((w) => OTHER_WORDS.has(w)).length;
+  return !(other >= 2 && other > english);
 }

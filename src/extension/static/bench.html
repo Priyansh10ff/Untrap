@@ -33,7 +33,8 @@
       <label class="note" for="set">Set</label>
       <select id="set" style="height:38px;border:1px solid var(--line);border-radius:10px;padding:0 10px;font:inherit;background:#fff">
         <option value="tuning">Tuning set (80, used to tune Untrap)</option>
-        <option value="heldout">Held-out set (40, never used for tuning)</option>
+        <option value="heldout">Held-out set (40, written after tuning; its misses guided the current version)</option>
+        <option value="external">External set (94, from Microsoft's BIPIA benchmark, never used for tuning)</option>
       </select>
       <button class="btn green" id="run" type="button">Run benchmark</button>
       <button class="btn" id="download" type="button" disabled>Download results</button>

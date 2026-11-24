@@ -1,6 +1,6 @@
 import type { Action, Candidate, Segment, Verdict } from "./types.ts";
 import { scoreText } from "./rules.ts";
-import { fingerprint, looksLikeProse, normalize } from "./text.ts";
+import { fingerprint, isMostlyEnglish, looksLikeProse, normalize } from "./text.ts";
 import { looksLikeOrder } from "./ground.ts";
 
 /**
@@ -44,9 +44,7 @@ export async function selectCandidates(segments: Segment[], policy: Policy = POL
     const text = normalize(s.text);
     if (text.length < 12) continue;
     const { score, signals } = scoreText(text);
-    const worth = s.hidden
-      ? score >= policy.hiddenCandidateScore || (PROSE_CHECKED.has(s.technique) && text.length >= policy.hiddenProseChars && looksLikeProse(text))
-      : score >= policy.visibleCandidateScore;
+    const worth = s.hidden ? hiddenWorthChecking(s, text, score, policy) : score >= policy.visibleCandidateScore;
     if (!worth) continue;
     const hash = await fingerprint(text);
     if (seen.has(hash)) continue;
@@ -58,11 +56,21 @@ export async function selectCandidates(segments: Segment[], policy: Policy = POL
 }
 
 /**
- * Hidden prose without any rule signals is still worth a model check when it was hidden on
- * purpose. Meta descriptions, alt text and noscript blocks are prose on almost every page, so
- * they need a rule signal first.
+ * The rules can't recognise every way of phrasing an order (other languages, polite or passive
+ * wording), so they mustn't be the only gate. Hidden prose goes to the AI whatever the rules
+ * say, with one exception: alt text and other attributes are prose on almost every page, so
+ * they go only when something in them points at a machine reader or reads like an order.
  */
-const PROSE_CHECKED = new Set<Segment["technique"]>(["display-none", "visibility-hidden", "transparent", "tiny-font", "same-color", "offscreen", "clipped", "html-comment"]);
+function hiddenWorthChecking(s: Segment, text: string, score: number, policy: Policy): boolean {
+  if (score >= policy.hiddenCandidateScore) return true;
+  if (!looksLikeProse(text)) return false;
+  if (ATTRIBUTE_LIKE.has(s.technique)) return score > 0 || MACHINE_READER.test(text) || looksLikeOrder(text) || !isMostlyEnglish(text);
+  return text.length >= policy.hiddenProseChars || (!isMostlyEnglish(text) && text.length >= policy.hiddenProseChars / 2);
+}
+
+const ATTRIBUTE_LIKE = new Set<Segment["technique"]>(["attribute", "aria-hidden"]);
+/** Mentions of an automated reader, in any phrasing: "for AI", "LLMs", "bots", "crawlers". */
+const MACHINE_READER = /\b(?:ai|a\.i\.|llms?|gpt|bots?|agents?|assistants?|models?|crawlers?|scrapers?|summari[sz]ers?|automated)\b/i;
 
 const rank = (c: Candidate) => c.score + (c.hidden ? 0.2 : 0);
 
@@ -79,6 +87,8 @@ export function needsSecondOpinion(c: Candidate, v: Verdict, policy: Policy = PO
   if (v.verdict === "attack") {
     // People can see visible text, so removing it on the small model's word alone is too costly.
     if (!c.hidden && v.source === "on_device") return true;
+    // Non-English text can't be checked against our order patterns: let the cloud confirm.
+    if (v.source === "on_device" && !isMostlyEnglish(c.text)) return true;
     if (c.technique === "invisible-unicode") return false; // smuggled text is never legitimate
     // Weak evidence: nothing aims the text at an AI or asks for anything dangerous, yet the
     // small model says attack (a build comment, "You must enter a valid email"). The cloud decides.
@@ -86,10 +96,12 @@ export function needsSecondOpinion(c: Candidate, v: Verdict, policy: Policy = PO
     return v.confidence < policy.confidentAttack;
   }
   // The device said benign. Quiet, polite attacks are where Gemini Nano slips, so double-check
-  // when the rules disagree, or when hidden text speaks to an AI or reads like an order.
+  // when the rules disagree, or when hidden text speaks to an AI, reads like an order, or isn't
+  // in English (Nano is set up for English, and our order checks are English too).
   if (v.source !== "on_device") return false;
   if (c.score >= policy.rulesDisagree) return true;
-  return c.hidden && (c.signals.includes("speaks to AI") || looksLikeOrder(c.text));
+  if (!isMostlyEnglish(c.text)) return true;
+  return c.hidden && (c.signals.includes("speaks to AI") || MACHINE_READER.test(c.text) || looksLikeOrder(c.text));
 }
 
 /** Signals that aim text at an AI or ask for something dangerous. */

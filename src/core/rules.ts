@@ -13,14 +13,18 @@ interface Rule {
 }
 
 const AI_NAMES = String.raw`(?:chat ?gpt|gpt-?\d|openai|claude|anthropic|gemini|bard|copilot|perplexity|llama|mistral|grok|deepseek)`;
-const AI_WORDS = String.raw`(?:ai|a\.i\.|llm|large language model|language model|ai (?:assistant|agent|model|system|bot|summari[sz]er|crawler)|assistant|agent|chatbot|bot|model|summari[sz]er|crawler)`;
+const AI_WORDS = String.raw`(?:ai|a\.i\.|llm|large language model|language model|ai (?:assistant|agent|model|system|bot|summari[sz]er|crawler|scraper|reader)|assistant|agent|chatbot|bot|model|summari[sz]er|crawler|scraper)`;
+/** Words that pick out a reader: "any AI", "whatever model", "all agents". */
+const WHICH = String.raw`(?:the |any |all |every |each |whatever |whichever |an? )?`;
+/** Section labels attackers put after "Agent" or "AI": "Agent policy update:", "AI instructions:". */
+const HEADER = String.raw`(?:policy|policies|update|instructions?|notes?|notice|task|directive|rules?|guidelines?|reminder|memo|directions?)`;
 
 export const RULES: Rule[] = [
   {
     name: "speaks to AI",
     weight: 0.6,
     pattern: new RegExp(
-      String.raw`\b(?:if you(?:'re| are) an? ${AI_WORDS}|(?:dear|attention|note (?:to|for)|message (?:to|for)|hey|hello|hi)[,:]? (?:any |all |the )?${AI_WORDS}s?|(?:any|all) ${AI_WORDS}s? (?:reading|processing|summari[sz]ing|visiting)|${AI_WORDS}s? (?:reading|processing|summari[sz]ing|browsing) this|to (?:the|any) ${AI_WORDS}s? (?:reading|that))|^\s*(?:(?:ai|llm)\s+)?(?:ai|llm|agent|assistant|model|bot)s?\s*[:,]|\b(?:ai|llm|agent|assistant|model)s? (?:instructions?|note|notice|task|directive)s?\b`,
+      String.raw`\b(?:if you(?:'re| are) an? ${AI_WORDS}|(?:dear|attention|(?:note|message|reminder|memo|notice|ps|p\.s\.|tip|instructions?) (?:to|for)|hey|hello|hi)[,:]? ${WHICH}(?:\w+ )?${AI_WORDS}s?\b|(?:any|all|every|whatever|whichever) ${AI_WORDS}s? (?:reading|processing|summari[sz]ing|visiting|scraping|crawling|parsing|indexing)|${AI_WORDS}s? (?:reading|processing|summari[sz]ing|browsing|scraping|crawling|parsing|indexing) (?:this|these|my|our)|to ${WHICH}${AI_WORDS}s? (?:reading|that|which|who|processing)|whoever (?:is )?(?:reads?|reading|process(?:es|ing)?|summari[sz](?:es|ing))|automated (?:readers?|agents?|assistants?|systems?|tools?))|^\s*(?:(?:ai|llm)\s+)?(?:ai|llm|agent|assistant|model|bot)s?\s*[:,]|^\s*(?:ai|llm|agent|assistant|model|bot)s?(?: ${HEADER}){1,2}\s*:|\b(?:ai|llm|agent|assistant|model)s? (?:instructions?|note|notice|task|directive)s?\b|\binstructions?[ -]for[ -](?:ai|llms?|agents?|models?|bots?)\b`,
       "i",
     ),
   },

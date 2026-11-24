@@ -1,5 +1,6 @@
 import { SAMPLES, type Sample } from "../bench/samples.ts";
 import { HELDOUT } from "../bench/heldout.ts";
+import { EXTERNAL } from "../bench/external-bipia.ts";
 import { pct, score, type Outcome } from "../bench/metrics.ts";
 import { rulesVerdict, selectCandidates } from "../core/policy.ts";
 import type { JudgeResult, Msg, Settings } from "../core/messages.ts";
@@ -26,7 +27,10 @@ let rows: Row[] = [];
 // The tuning set was used to tune the rules and prompts; the held-out set never was.
 const TUNING = { name: "tuning", samples: SAMPLES };
 const HELD_OUT = { name: "heldout", samples: HELDOUT };
-const currentSet = () => ($<HTMLSelectElement>("set").value === "heldout" ? HELD_OUT : TUNING);
+// Written by Microsoft for the BIPIA benchmark, not by this project, and never used for tuning.
+const EXTERNAL_SET = { name: "external-bipia", samples: EXTERNAL };
+const SETS: Record<string, typeof TUNING> = { tuning: TUNING, heldout: HELD_OUT, external: EXTERNAL_SET };
+const currentSet = () => SETS[$<HTMLSelectElement>("set").value] ?? TUNING;
 
 async function runOne(s: Sample): Promise<Row> {
   const base = { id: s.id, expected: s.label, text: s.text, technique: s.technique };
