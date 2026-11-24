@@ -1,4 +1,5 @@
 import { SAMPLES, type Sample } from "../bench/samples.ts";
+import { HELDOUT } from "../bench/heldout.ts";
 import { pct, score, type Outcome } from "../bench/metrics.ts";
 import { rulesVerdict, selectCandidates } from "../core/policy.ts";
 import type { JudgeResult, Msg, Settings } from "../core/messages.ts";
@@ -21,6 +22,11 @@ interface Row extends Outcome {
 }
 
 let rows: Row[] = [];
+
+// The tuning set was used to tune the rules and prompts; the held-out set never was.
+const TUNING = { name: "tuning", samples: SAMPLES };
+const HELD_OUT = { name: "heldout", samples: HELDOUT };
+const currentSet = () => ($<HTMLSelectElement>("set").value === "heldout" ? HELD_OUT : TUNING);
 
 async function runOne(s: Sample): Promise<Row> {
   const base = { id: s.id, expected: s.label, text: s.text, technique: s.technique };
@@ -93,8 +99,9 @@ $("run").addEventListener("click", async () => {
   $("summary").replaceChildren();
   $<HTMLButtonElement>("download").disabled = true;
   const started = Date.now();
-  for (const [i, s] of SAMPLES.entries()) {
-    $("progress").textContent = `Checking ${i + 1} of ${SAMPLES.length}…`;
+  const set = currentSet().samples;
+  for (const [i, s] of set.entries()) {
+    $("progress").textContent = `Checking ${i + 1} of ${set.length}…`;
     try {
       rows.push(await runOne(s));
     } catch (err) {
@@ -103,7 +110,7 @@ $("run").addEventListener("click", async () => {
     renderRow(rows.at(-1)!);
     renderSummary();
   }
-  $("progress").textContent = `Done: ${SAMPLES.length} samples in ${Math.round((Date.now() - started) / 1000)}s.`;
+  $("progress").textContent = `Done: ${set.length} samples in ${Math.round((Date.now() - started) / 1000)}s.`;
   button.disabled = false;
   $<HTMLButtonElement>("download").disabled = false;
 });
@@ -111,11 +118,11 @@ $("run").addEventListener("click", async () => {
 $("download").addEventListener("click", () => {
   const s = score(rows);
   const rules = score(rows.map((r) => ({ ...r, predicted: r.rulesOnly })));
-  const report = { date: new Date().toISOString(), chrome: navigator.userAgent, samples: rows.length, untrap: s, rulesOnly: rules, rows };
+  const report = { date: new Date().toISOString(), set: currentSet().name, chrome: navigator.userAgent, samples: rows.length, untrap: s, rulesOnly: rules, rows };
   const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }));
   const a = document.createElement("a");
   a.href = url;
-  a.download = "untrap-benchmark.json";
+  a.download = `untrap-benchmark-${currentSet().name}.json`;
   a.click();
   URL.revokeObjectURL(url);
 });
@@ -123,4 +130,16 @@ $("download").addEventListener("click", () => {
 void onDeviceAvailability().then((state) => {
   $("device").textContent = state === "available" ? "Gemini Nano is ready: first checks run on this device." : "Gemini Nano isn't available: first checks run in the cloud.";
 });
-$("count").textContent = `${SAMPLES.filter((s) => s.label === "attack").length} attacks and ${SAMPLES.filter((s) => s.label === "benign").length} harmless samples`;
+function showCount() {
+  const set = currentSet().samples;
+  $("count").textContent = `${set.filter((s) => s.label === "attack").length} attacks and ${set.filter((s) => s.label === "benign").length} harmless samples`;
+}
+$("set").addEventListener("change", () => {
+  rows = [];
+  $("rows").replaceChildren();
+  $("summary").replaceChildren();
+  $<HTMLButtonElement>("download").disabled = true;
+  $("progress").textContent = "";
+  showCount();
+});
+showCount();
