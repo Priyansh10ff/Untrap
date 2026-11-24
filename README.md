@@ -84,15 +84,24 @@ npm run check             # typecheck + tests + build
 
 Load `dist/extension` with **Load unpacked**. `npm run watch` rebuilds on every change.
 
+### Public and private builds
+
+| Command | What you get | Share it? |
+|---|---|---|
+| `npm run build`, `npm run zip` | **Public build**: Gemini Nano on the device plus the rules. No App Check token inside, so no cloud Gemini, shared blocklist or stats. | Yes. `npm run zip` refuses to run if any secret is in `dist/`. |
+| `npm run build:private`, `npm run zip:private` | **Private build**: adds the App Check debug token from `.env`, which turns on cloud Gemini, the shared blocklist and stats. | No. Only with people you trust (for example hackathon judges), then revoke the token. |
+
+Why: a Chrome extension can't run reCAPTCHA, so the only App Check option without a server is a debug token, and anything inside a published extension can be pulled out. On Firebase's Blaze plan the proper fix is a Cloud Function that hands out short-lived App Check tokens per install; this project runs on the free Spark plan.
+
 ### Firebase setup
 
 1. Create a Firebase project and add a **Web app**. Copy its config into `.env`.
 2. **AI Logic**: open *AI Logic* in the console and enable the **Gemini Developer API**.
 3. **Firestore**: create a database, then deploy the rules: `npx firebase-tools deploy --only firestore:rules`.
 4. **App Check**: register the web app with **reCAPTCHA Enterprise** (for the website) and put the site key in `.env`. Chrome extensions can't run reCAPTCHA, so add a **debug token** under *Manage debug tokens* and put it in `APPCHECK_DEBUG_TOKEN`. Then enforce App Check for AI Logic and Firestore.
-5. **Website**: `npm run build && npx firebase-tools deploy --only hosting` publishes the landing page and the Attack Lab.
+5. **Website**: `npm run build && npx firebase-tools deploy --only hosting` publishes the landing page and the Attack Lab, with a Content-Security-Policy and other security headers (`firebase.json`).
 
-`.env` is git-ignored. Never commit it: the debug token lets anyone use your AI quota.
+`.env` is git-ignored. Never commit it: the debug token lets anyone use your AI quota. `npm run check:secrets` scans every tracked file for your `.env` secrets and common key formats, and `npm run check` runs it first.
 
 ## Privacy
 
@@ -116,6 +125,7 @@ firestore.rules  shared blocklist and counters
 ```bash
 npm test                 # rules, prompt, policy
 npm run test:browser     # runs the real extractor in Chromium on the Attack Lab (needs Playwright)
+npm run test:csp         # loads the site with its security headers and the extension, checks nothing is blocked
 ```
 
 The browser test checks that all 11 Attack Lab traps are found with the right technique, at desktop and phone widths, and that the harmless hidden text (skip links, screen-reader ratings, hidden menus, build comments) is left alone.

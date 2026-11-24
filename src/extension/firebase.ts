@@ -15,6 +15,15 @@ declare const __SECOND_OPINION_MODEL__: string;
 
 export const firebaseConfigured = Boolean(__FIREBASE_CONFIG__?.apiKey && __FIREBASE_CONFIG__?.appId);
 
+/**
+ * Cloud Gemini, the shared blocklist and the stats all need an App Check token. A Chrome
+ * extension can't run reCAPTCHA, so only a private build (`npm run build:private`, for you and
+ * the judges) carries a debug token. The public build (`npm run build`) has none and runs on
+ * Gemini Nano and the rules only, so nothing in it can be pulled out and used against the
+ * project's AI quota.
+ */
+export const cloudEnabled = firebaseConfigured && Boolean(__APPCHECK_DEBUG_TOKEN__);
+
 /** Must match between download (welcome page) and use (offscreen), or Chrome treats them as different models. */
 export const ON_DEVICE_OPTIONS: LanguageModelCreateOptions = {
   expectedInputs: [{ type: "text", languages: ["en"] }],

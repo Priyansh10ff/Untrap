@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { scoreText } from "../src/core/rules.ts";
 import { buildPrompt, parseVerdict } from "../src/core/prompt.ts";
-import { actionFor, needsSecondOpinion, POLICY, preRemove, rulesVerdict, selectCandidates } from "../src/core/policy.ts";
+import { actionFor, limitToBuild, needsSecondOpinion, POLICY, preRemove, rulesVerdict, selectCandidates } from "../src/core/policy.ts";
 import { decodeTagChars, fingerprint, hasInvisibleChars, looksLikeProse, normalize } from "../src/core/text.ts";
 import type { Candidate, Segment, Verdict } from "../src/core/types.ts";
 import { ATTACKS, BENIGN, VISIBLE_DOCS } from "./fixtures.ts";
@@ -248,5 +248,16 @@ describe("benchmark set", () => {
       { id: "3", expected: "benign", predicted: "benign", decidedBy: "filtered" },
     ]);
     expect(s).toMatchObject({ tp: 1, fp: 1, tn: 1, fn: 0, precision: 0.5, recall: 1, onDeviceShare: 0.5 });
+  });
+});
+
+describe("public and private builds", () => {
+  const on = { enabled: true, cloud: true, share: true, paused: [] as string[] };
+  it("keeps cloud and blocklist off in a build without cloud access, whatever the toggles say", () => {
+    expect(limitToBuild(on, false)).toEqual({ ...on, cloud: false, share: false });
+  });
+  it("leaves the person's choices alone when the build has cloud access", () => {
+    expect(limitToBuild(on, true)).toEqual(on);
+    expect(limitToBuild({ ...on, cloud: false }, true).cloud).toBe(false);
   });
 });

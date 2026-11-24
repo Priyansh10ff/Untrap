@@ -1,5 +1,5 @@
 import { DEFAULT_SETTINGS, type Msg, type SelfTest, type Settings } from "../core/messages.ts";
-import { getModels, onDeviceAvailability } from "./firebase.ts";
+import { cloudEnabled, getModels, onDeviceAvailability } from "./firebase.ts";
 
 declare const __SITE_URL__: string;
 
@@ -10,8 +10,11 @@ let settings: Settings = DEFAULT_SETTINGS;
 async function load() {
   const stored = await chrome.storage.local.get("settings");
   settings = { ...DEFAULT_SETTINGS, ...(stored.settings as Partial<Settings> | undefined) };
-  $<HTMLInputElement>("cloud").checked = settings.cloud;
-  $<HTMLInputElement>("share").checked = settings.share;
+  $<HTMLInputElement>("cloud").checked = settings.cloud && cloudEnabled;
+  $<HTMLInputElement>("share").checked = settings.share && cloudEnabled;
+  $<HTMLInputElement>("cloud").disabled = !cloudEnabled;
+  $<HTMLInputElement>("share").disabled = !cloudEnabled;
+  $("cloud-off").hidden = cloudEnabled;
   $("paused").textContent = settings.paused.length ? settings.paused.join(", ") : "None";
   $<HTMLAnchorElement>("lab-link").href = `${__SITE_URL__}/lab/`;
 }
@@ -102,8 +105,8 @@ $("self-test").addEventListener("click", async () => {
   const r = (await chrome.runtime.sendMessage({ type: "self-test" } satisfies Msg)) as SelfTest;
   const where = r.source === "on_device" ? "on this device (Gemini Nano)" : r.source === "in_cloud" ? "in the cloud (Nano wasn't used)" : "";
   const first = r.ok ? `First check ran ${where} in ${((r.ms ?? 0) / 1000).toFixed(1)}s: ${r.verdict} (${r.category}).` : `First check failed: ${r.error}`;
-  const cloud = r.cloudOk ? ` Cloud second opinion works (${((r.cloudMs ?? 0) / 1000).toFixed(1)}s).` : ` Cloud second opinion failed: ${r.cloudError ?? "no valid verdict"}`;
-  out.textContent = `${first}${cloud} App Check: ${r.appCheck ?? "?"}. Cloud first pass: ${r.fastCloud ?? "?"}.`;
+  const cloud = !cloudEnabled ? " Cloud checks are off in this build." : r.cloudOk ? ` Cloud second opinion works (${((r.cloudMs ?? 0) / 1000).toFixed(1)}s).` : ` Cloud second opinion failed: ${r.cloudError ?? "no valid verdict"}`;
+  out.textContent = cloudEnabled ? `${first}${cloud} App Check: ${r.appCheck ?? "?"}. Cloud first pass: ${r.fastCloud ?? "?"}.` : `${first}${cloud}`;
   button.disabled = false;
 });
 

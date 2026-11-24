@@ -10,12 +10,15 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
+    "build:private": "node scripts/build.mjs --private",
     "watch": "node scripts/build.mjs --watch",
+    "watch:private": "node scripts/build.mjs --watch --private",
     "test": "vitest run",
     "test:browser": "node scripts/test-browser.mjs",
     "typecheck": "tsc --noEmit",
     "check": "npm run check:secrets && npm run typecheck && npm test && npm run build",
     "zip": "node scripts/zip.mjs",
+    "zip:private": "node scripts/zip.mjs --private",
     "check:secrets": "node scripts/check-secrets.mjs",
     "test:csp": "node scripts/test-csp.mjs"
   },

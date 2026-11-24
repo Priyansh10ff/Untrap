@@ -1,6 +1,12 @@
 // Builds the Chrome extension (dist/extension), the website (dist/site) and a test bundle.
 // Firebase settings come from .env (copy .env.example). Without them the extension still
 // builds and runs on rules only.
+//
+//   npm run build          public build: Gemini Nano and rules only, no App Check debug token.
+//                          This is the one you can publish.
+//   npm run build:private  adds the App Check debug token from .env, which turns on cloud
+//                          Gemini, the shared blocklist and stats. Never publish this build:
+//                          anyone who has it can use the project's AI quota.
 import { build, context } from "esbuild";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -8,6 +14,7 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const watch = process.argv.includes("--watch");
+const privateBuild = process.argv.includes("--private");
 const env = { ...readEnv(join(root, ".env")), ...process.env };
 
 function readEnv(path) {
@@ -34,7 +41,7 @@ const siteUrl = (env.SITE_URL || (firebase ? `https://${firebase.projectId}.web.
 
 const define = {
   __FIREBASE_CONFIG__: JSON.stringify(firebase),
-  __APPCHECK_DEBUG_TOKEN__: JSON.stringify(env.APPCHECK_DEBUG_TOKEN || ""),
+  __APPCHECK_DEBUG_TOKEN__: JSON.stringify(privateBuild ? env.APPCHECK_DEBUG_TOKEN || "" : ""),
   __RECAPTCHA_SITE_KEY__: JSON.stringify(env.RECAPTCHA_ENTERPRISE_SITE_KEY || ""),
   __FIRST_PASS_CLOUD_MODEL__: JSON.stringify(env.FIRST_PASS_CLOUD_MODEL || "gemini-3.5-flash-lite"),
   __SECOND_OPINION_MODEL__: JSON.stringify(env.SECOND_OPINION_MODEL || "gemini-3.5-flash-lite"),
@@ -66,5 +73,10 @@ if (watch) {
   console.log("Watching for changes…");
 } else {
   await Promise.all(builds.map((b) => build(b)));
-  console.log(`\nBuilt dist/extension and dist/site. Firebase: ${firebase ? firebase.projectId : "not configured (rules only)"}. App Check debug token: ${env.APPCHECK_DEBUG_TOKEN ? "set" : "not set"}.`);
+  const mode = !privateBuild
+    ? "PUBLIC (on-device only, safe to publish)"
+    : env.APPCHECK_DEBUG_TOKEN
+      ? "PRIVATE (cloud on, contains your App Check debug token: never publish)"
+      : "PRIVATE requested, but APPCHECK_DEBUG_TOKEN is empty in .env: cloud stays off";
+  console.log(`\nBuilt dist/extension and dist/site. Firebase: ${firebase ? firebase.projectId : "not configured (rules only)"}. Build: ${mode}.`);
 }

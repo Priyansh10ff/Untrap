@@ -9,6 +9,14 @@ import { looksLikeOrder } from "./ground.ts";
  * changes the page they're reading. So hidden text is removed on suspicion, visible text only
  * when the model is sure.
  */
+/**
+ * The person's settings, limited to what this build can do: without cloud access (the public
+ * build has no App Check token) the cloud and the shared blocklist stay off whatever the toggles say.
+ */
+export function limitToBuild<T extends { cloud: boolean; share: boolean }>(settings: T, cloudEnabled: boolean): T {
+  return { ...settings, cloud: settings.cloud && cloudEnabled, share: settings.share && cloudEnabled };
+}
+
 export const POLICY = {
   /** Hidden text scoring at least this is removed right away, before any model runs. */
   preRemoveScore: 0.55,

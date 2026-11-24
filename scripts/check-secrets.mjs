@@ -2,6 +2,8 @@
 //
 //   node scripts/check-secrets.mjs            checks the files git tracks (run before you push)
 //   node scripts/check-secrets.mjs --release  also checks dist/, which is what gets zipped and shipped
+//   ... --release --allow-debug-token          the same, but lets the App Check debug token stay in
+//                                              dist/ (only for the private judges' zip)
 //
 // It looks for two things: the actual values of secrets in your .env (anything named *TOKEN*,
 // *SECRET*, *PASSWORD* or *PRIVATE*), and well-known secret formats (private keys, GitHub and
@@ -12,6 +14,7 @@ import { join, relative } from "node:path";
 
 const root = join(import.meta.dirname, "..");
 const release = process.argv.includes("--release");
+const allowDebugToken = process.argv.includes("--allow-debug-token");
 
 function readEnv() {
   const file = join(root, ".env");
@@ -27,7 +30,7 @@ function readEnv() {
 const env = readEnv();
 const secretValues = Object.entries(env)
   .filter(([key, value]) => /TOKEN|SECRET|PASSWORD|PRIVATE/.test(key) && value.length >= 8)
-  .map(([key, value]) => ({ name: `the value of ${key} from .env`, test: (text) => text.includes(value) }));
+  .map(([key, value]) => ({ key, name: `the value of ${key} from .env`, test: (text) => text.includes(value) }));
 
 const PATTERNS = [
   ["a private key", /-----BEGIN [A-Z ]*PRIVATE KEY-----/],
@@ -40,11 +43,15 @@ const PATTERNS = [
 // allowed in dist/. It still doesn't belong in source files: those read it from .env.
 const API_KEY = /\bAIza[0-9A-Za-z_-]{35}\b/;
 
+// Outside a git checkout (for example a copy of the project), check what git would track: the
+// same files minus what .gitignore leaves out.
+const NOT_TRACKED = /^(?:node_modules|dist|\.git|\.firebase)\/|(?:^|\/)\.env(?:\.(?!example$)[^/]*)?$|\.zip$|(?:^|\/)(?:firebase|firestore)-debug\.log$/;
+
 function trackedFiles() {
   try {
-    return execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8" }).split("\0").filter(Boolean);
+    return execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).split("\0").filter(Boolean);
   } catch {
-    return walk(root).filter((f) => !/^(node_modules|dist|\.git)\//.test(f));
+    return walk(root).filter((f) => !NOT_TRACKED.test(f));
   }
 }
 
@@ -61,11 +68,14 @@ function walk(dir) {
 
 const problems = [];
 
-function scan(file, { allowApiKey }) {
+function scan(file, { allowApiKey, allowDebugToken = false }) {
   const full = join(root, file);
   if (!existsSync(full) || statSync(full).size > 5_000_000) return;
   const text = readFileSync(full, "latin1");
-  for (const s of secretValues) if (s.test(text)) problems.push(`${file}: contains ${s.name}`);
+  for (const s of secretValues) {
+    if (allowDebugToken && s.key === "APPCHECK_DEBUG_TOKEN") continue;
+    if (s.test(text)) problems.push(`${file}: contains ${s.name}`);
+  }
   for (const [name, re] of PATTERNS) if (re.test(text)) problems.push(`${file}: looks like it contains ${name}`);
   if (!allowApiKey && API_KEY.test(text)) problems.push(`${file}: contains a Firebase/Google API key (read it from .env instead)`);
 }
@@ -79,7 +89,7 @@ for (const f of tracked) {
 if (release) {
   for (const dir of ["dist/extension", "dist/site"]) {
     if (!existsSync(join(root, dir))) continue;
-    for (const f of walk(join(root, dir))) scan(f, { allowApiKey: true });
+    for (const f of walk(join(root, dir))) scan(f, { allowApiKey: true, allowDebugToken });
   }
 }
 

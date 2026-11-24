@@ -1,12 +1,12 @@
 import { doc, getDoc, getFirestore, increment, serverTimestamp, setDoc, type Firestore } from "firebase/firestore/lite";
 import type { GenerativeModel } from "firebase/ai";
 import { buildCompactPrompt, buildPrompt, makeNonce, parseVerdict } from "../core/prompt.ts";
-import { needsSecondOpinion, rulesVerdict } from "../core/policy.ts";
+import { limitToBuild, needsSecondOpinion, rulesVerdict } from "../core/policy.ts";
 import { ground } from "../core/ground.ts";
 import { CATEGORIES, type Candidate, type Verdict } from "../core/types.ts";
 import type { EngineStatus, Msg, SelfTest, Settings, StatsDelta } from "../core/messages.ts";
 import { getToken } from "firebase/app-check";
-import { appCheck, firebaseApp, firebaseConfigured, getModels, onDeviceAvailability } from "./firebase.ts";
+import { appCheck, cloudEnabled, firebaseApp, firebaseConfigured, getModels, onDeviceAvailability } from "./firebase.ts";
 
 /**
  * The engine. Lives in an offscreen document so the model session and Firebase stay warm.
@@ -32,8 +32,14 @@ const SECOND_OPINION_TIMEOUT = 20_000;
 const SLOW_DEVICE_BACKOFF = 10 * 60_000;
 const CLOUD_PARALLEL = 4;
 
+/** The person's settings, limited to what this build can do (see cloudEnabled). */
+function effective(settings: Settings): Settings {
+  return limitToBuild(settings, cloudEnabled);
+}
+
 let db: Firestore | undefined;
 function firestore(): Firestore | undefined {
+  if (!cloudEnabled) return undefined;
   const app = firebaseApp();
   if (!app) return undefined;
   db ??= getFirestore(app);
@@ -231,12 +237,19 @@ async function selfTest(): Promise<SelfTest> {
   const out: SelfTest = { ok: false };
   try {
     const t0 = performance.now();
-    const v = await firstPass(c, { enabled: true, cloud: true, share: false, paused: [] });
+    const v = await firstPass(c, effective({ enabled: true, cloud: true, share: false, paused: [] }));
     out.ms = Math.round(performance.now() - t0);
     if (!v) throw new Error("The model replied, but not with a valid verdict.");
     Object.assign(out, { ok: true, source: v.source, verdict: v.verdict, category: v.category });
   } catch (err) {
     out.error = describe(err);
+  }
+  if (!cloudEnabled) {
+    out.appCheck = "not used (public build)";
+    out.fastCloud = "off in this build";
+    out.cloudOk = false;
+    out.cloudError = "off in this build: cloud checks need a private build (see README)";
+    return out;
   }
   // App Check token: if this hangs or fails, every cloud call will too.
   try {
@@ -274,7 +287,7 @@ function describe(err: unknown): string {
 }
 
 async function status(): Promise<EngineStatus> {
-  return { onDevice: await onDeviceAvailability(), cloud: firebaseConfigured, firebase: firebaseConfigured };
+  return { onDevice: await onDeviceAvailability(), cloud: cloudEnabled, firebase: firebaseConfigured };
 }
 
 async function addStats(delta: StatsDelta) {
@@ -301,7 +314,7 @@ chrome.runtime.onMessage.addListener((msg: Msg, _sender, reply) => {
     case "engine-classify":
       // Acknowledge now; verdicts follow one by one.
       reply({ ok: true });
-      void classify(msg.tabId, msg.url, msg.candidates, msg.settings).catch((err: Error) => {
+      void classify(msg.tabId, msg.url, msg.candidates, effective(msg.settings)).catch((err: Error) => {
         console.error("Untrap engine error", err);
         for (const c of msg.candidates) void chrome.runtime.sendMessage({ type: "engine-verdict", tabId: msg.tabId, url: msg.url, hash: c.hash, verdict: rulesVerdict(c) } satisfies Msg);
       });
@@ -312,7 +325,7 @@ chrome.runtime.onMessage.addListener((msg: Msg, _sender, reply) => {
     case "engine-judge": {
       // Used by the benchmark page: one candidate, no blocklist, timed.
       const t0 = performance.now();
-      void judge(msg.candidate, msg.settings).then((r) => reply({ ...r, ms: Math.round(performance.now() - t0) }));
+      void judge(msg.candidate, effective(msg.settings)).then((r) => reply({ ...r, ms: Math.round(performance.now() - t0) }));
       return true;
     }
     case "engine-self-test":
