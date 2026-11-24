@@ -11,6 +11,13 @@ if (!existsSync(join(src, "manifest.json"))) {
   console.error("Run `npm run build` first.");
   process.exit(1);
 }
+// Never ship a secret: stop if dist/ contains one (for example the App Check debug token).
+try {
+  execFileSync(process.execPath, [join(root, "scripts/check-secrets.mjs"), "--release"], { stdio: "inherit" });
+} catch {
+  console.error("Not zipping: fix the secret check above first.");
+  process.exit(1);
+}
 rmSync(out, { force: true });
 if (process.platform === "win32") {
   execFileSync("powershell", ["-NoProfile", "-Command", `Compress-Archive -Path '${src}\\*' -DestinationPath '${out}'`], { stdio: "inherit" });

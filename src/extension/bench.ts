@@ -115,10 +115,13 @@ $("run").addEventListener("click", async () => {
   $<HTMLButtonElement>("download").disabled = false;
 });
 
+/** Only the Chrome major version goes in the report: the full user agent also names the OS. */
+const chromeMajor = () => navigator.userAgent.match(/Chrome\/(\d+)/)?.[1] ?? "unknown";
+
 $("download").addEventListener("click", () => {
   const s = score(rows);
   const rules = score(rows.map((r) => ({ ...r, predicted: r.rulesOnly })));
-  const report = { date: new Date().toISOString(), set: currentSet().name, chrome: navigator.userAgent, samples: rows.length, untrap: s, rulesOnly: rules, rows };
+  const report = { date: new Date().toISOString(), set: currentSet().name, chrome: chromeMajor(), samples: rows.length, untrap: s, rulesOnly: rules, rows };
   const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }));
   const a = document.createElement("a");
   a.href = url;

@@ -14,8 +14,10 @@
     "test": "vitest run",
     "test:browser": "node scripts/test-browser.mjs",
     "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && npm test && npm run build",
-    "zip": "node scripts/zip.mjs"
+    "check": "npm run check:secrets && npm run typecheck && npm test && npm run build",
+    "zip": "node scripts/zip.mjs",
+    "check:secrets": "node scripts/check-secrets.mjs",
+    "test:csp": "node scripts/test-csp.mjs"
   },
   "dependencies": {
     "firebase": "13.3.0"
