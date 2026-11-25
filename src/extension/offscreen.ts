@@ -2,6 +2,7 @@ import { doc, getDoc, getFirestore, increment, serverTimestamp, setDoc, type Fir
 import type { GenerativeModel } from "firebase/ai";
 import { buildCompactPrompt, buildPrompt, makeNonce, parseVerdict } from "../core/prompt.ts";
 import { limitToBuild, needsSecondOpinion, rulesVerdict } from "../core/policy.ts";
+import { quotaRetryMs, RatePacer } from "../core/pacing.ts";
 import { ground } from "../core/ground.ts";
 import { CATEGORIES, type Candidate, type Verdict } from "../core/types.ts";
 import type { EngineStatus, Msg, SelfTest, Settings, StatsDelta } from "../core/messages.ts";
@@ -28,9 +29,16 @@ const DEVICE_TIMEOUT = 20_000;
 const CLOUD_TIMEOUT = 30_000;
 /** A second opinion that takes longer than this isn't worth waiting for: Nano's verdict stands. */
 const SECOND_OPINION_TIMEOUT = 20_000;
-/** After a Nano timeout, use the cloud for this long instead of queueing behind a stuck model. */
-const SLOW_DEVICE_BACKOFF = 10 * 60_000;
+/**
+ * After a Nano timeout, prefer the cloud for this long instead of queueing behind a stuck model.
+ * Kept short: one hang shouldn't push every check onto the cloud's small free quota.
+ */
+const SLOW_DEVICE_BACKOFF = 2 * 60_000;
 const CLOUD_PARALLEL = 4;
+/** Stay under the free plan's per-minute quota for the cloud model. */
+const CLOUD_PER_MINUTE = 12;
+/** If the cloud can't take a call within this long, don't wait: let Nano decide instead. */
+const MAX_CLOUD_WAIT = 30_000;
 
 /** The person's settings, limited to what this build can do (see cloudEnabled). */
 function effective(settings: Settings): Settings {
@@ -68,6 +76,37 @@ async function limited<T>(task: () => Promise<T>): Promise<T> {
   }
 }
 
+const pacer = new RatePacer(CLOUD_PER_MINUTE);
+/** Set when the API says "too many requests": no cloud calls until then. */
+let cloudPausedUntil = 0;
+class CloudBusy extends Error {}
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Every cloud call goes through here: at most CLOUD_PARALLEL at once and CLOUD_PER_MINUTE a
+ * minute. A "too many requests" reply pauses the cloud for as long as the API asks, and the call
+ * is retried once. If the wait would be too long, the call fails fast so Nano can decide instead.
+ */
+function cloudCall<T>(task: () => Promise<T>): Promise<T> {
+  return limited(async () => {
+    for (let attempt = 0; ; attempt++) {
+      const wait = Math.max(pacer.waitMs(), cloudPausedUntil - Date.now());
+      if (wait > MAX_CLOUD_WAIT) throw new CloudBusy(`cloud quota is used up for the next ${Math.ceil(wait / 1000)}s`);
+      if (wait > 0) await sleep(wait);
+      pacer.record();
+      try {
+        return await task();
+      } catch (err) {
+        const retry = quotaRetryMs(err);
+        if (retry === null) throw err;
+        cloudPausedUntil = Math.max(cloudPausedUntil, Date.now() + retry);
+        console.warn(`Untrap: cloud quota reached, pausing cloud checks for ${Math.ceil(retry / 1000)}s.`);
+        if (attempt >= 1) throw err;
+      }
+    }
+  });
+}
+
 class Timeout extends Error {}
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Timeout(`model timed out after ${ms / 1000}s`)), ms))]);
@@ -91,28 +130,62 @@ async function deviceUsable(): Promise<boolean> {
   return Date.now() > deviceSlowUntil && (await onDeviceAvailability()) === "available";
 }
 
-/** First pass: Gemini Nano through Firebase AI Logic when it's usable, otherwise cloud Gemini. */
-async function firstPass(c: Candidate, settings: Settings): Promise<Verdict | null> {
+interface Attempt {
+  verdict: Verdict | null;
+  /** What went wrong on the way, for people and the benchmark. Empty if nothing did. */
+  errors: string[];
+}
+
+/**
+ * First pass: Gemini Nano through Firebase AI Logic when it's usable, otherwise cloud Gemini.
+ * If the one we tried fails, the other gets a go, so a stuck Nano or a used-up cloud quota
+ * doesn't quietly turn into rules-only checking.
+ */
+async function firstPass(c: Candidate, settings: Settings): Promise<Attempt> {
   const models = getModels();
-  if (!models) return null;
-  if (await deviceUsable()) {
+  if (!models) return { verdict: null, errors: [] };
+  const errors: string[] = [];
+  const nanoReady = (await onDeviceAvailability()) === "available";
+
+  const tryDevice = async (allowCloudFallback: boolean): Promise<Verdict | null> => {
     try {
-      // PREFER_ON_DEVICE: runs on Nano; Firebase falls back to the cloud by itself if Nano can't take it.
-      const model = settings.cloud ? models.hybrid : models.deviceOnly;
+      // PREFER_ON_DEVICE runs on Nano, and Firebase falls back to the cloud by itself if Nano can't take it.
+      const model = allowCloudFallback && settings.cloud ? models.hybrid : models.deviceOnly;
       const v = await serial(() => ask(model, c, { compact: true, maxChars: ON_DEVICE_CHARS, timeout: deviceWarm ? DEVICE_TIMEOUT : FIRST_DEVICE_TIMEOUT }));
       if (v?.source === "on_device") deviceWarm = true;
-      if (v) return v;
+      if (!v) errors.push("on-device: no valid verdict");
+      return v;
     } catch (err) {
+      errors.push(`on-device: ${describe(err)}`);
       if (err instanceof Timeout) {
         deviceSlowUntil = Date.now() + SLOW_DEVICE_BACKOFF;
-        console.warn(`Untrap: Gemini Nano is too slow on this computer right now (${err.message}). Using cloud Gemini for the next 10 minutes.`);
+        console.warn(`Untrap: Gemini Nano is too slow right now (${err.message}). Preferring cloud Gemini for ${SLOW_DEVICE_BACKOFF / 60_000} minutes.`);
       } else {
         console.warn("Untrap: on-device check failed", err);
       }
+      return null;
     }
+  };
+  const tryCloud = async (): Promise<Verdict | null> => {
+    if (!settings.cloud) return null;
+    try {
+      const v = await cloudCall(() => ask(models.cloudFast, c, { compact: false, maxChars: CLOUD_CHARS, timeout: CLOUD_TIMEOUT }));
+      if (!v) errors.push("cloud: no valid verdict");
+      return v;
+    } catch (err) {
+      errors.push(`cloud: ${describe(err)}`);
+      return null;
+    }
+  };
+
+  if (nanoReady && Date.now() > deviceSlowUntil) {
+    const v = await tryDevice(true);
+    return { verdict: v ?? (await tryCloud()), errors };
   }
-  if (!settings.cloud) return null;
-  return limited(() => ask(models.cloudFast, c, { compact: false, maxChars: CLOUD_CHARS, timeout: CLOUD_TIMEOUT }));
+  const v = await tryCloud();
+  if (v) return { verdict: v, errors };
+  // The cloud failed or is off: give Nano another go, even if it was slow a moment ago.
+  return { verdict: nanoReady ? await tryDevice(false) : null, errors };
 }
 
 /** Loads Nano into memory before the first real check, so pages don't pay for it. */
@@ -183,9 +256,11 @@ function shouldReport(v: Verdict): boolean {
 async function judge(c: Candidate, settings: Settings): Promise<{ verdict: Verdict; firstSource?: string; secondOpinion: boolean }> {
   const models = getModels();
   let v: Verdict | null = null;
+  let errors: string[] = [];
   try {
-    v = await firstPass(c, settings);
+    ({ verdict: v, errors } = await firstPass(c, settings));
   } catch (err) {
+    errors.push(describe(err));
     console.warn("Untrap: first pass failed", err);
   }
   const firstSource = v?.source;
@@ -194,12 +269,21 @@ async function judge(c: Candidate, settings: Settings): Promise<{ verdict: Verdi
   if (v && v.source === "on_device" && settings.cloud && models && needsSecondOpinion(c, v)) {
     secondOpinion = true;
     try {
-      v = (await limited(() => ask(models.cloud, c, { compact: false, maxChars: CLOUD_CHARS, timeout: SECOND_OPINION_TIMEOUT }))) ?? v;
+      v = (await cloudCall(() => ask(models.cloud, c, { compact: false, maxChars: CLOUD_CHARS, timeout: SECOND_OPINION_TIMEOUT }))) ?? v;
     } catch (err) {
       console.warn("Untrap: second opinion failed", err);
     }
   }
-  return { verdict: v ?? rulesVerdict(c), firstSource, secondOpinion };
+  if (v) return { verdict: v, firstSource, secondOpinion };
+  // No AI verdict. If an AI should have answered but couldn't, say so: this isn't a judgement.
+  const fallback = rulesVerdict(c);
+  if (!errors.length) return { verdict: fallback, firstSource, secondOpinion };
+  console.warn("Untrap: AI unavailable for one check, using rules:", errors.join("; "));
+  return {
+    verdict: { ...fallback, unavailable: errors.join("; ").slice(0, 300), reason: fallback.verdict === "benign" ? "The AI was busy, so only the rules checked this. It's checked again next visit." : fallback.reason },
+    firstSource,
+    secondOpinion,
+  };
 }
 
 /** Checks each candidate and reports its verdict as soon as it's ready. */
@@ -237,9 +321,9 @@ async function selfTest(): Promise<SelfTest> {
   const out: SelfTest = { ok: false };
   try {
     const t0 = performance.now();
-    const v = await firstPass(c, effective({ enabled: true, cloud: true, share: false, paused: [] }));
+    const { verdict: v, errors } = await firstPass(c, effective({ enabled: true, cloud: true, share: false, paused: [] }));
     out.ms = Math.round(performance.now() - t0);
-    if (!v) throw new Error("The model replied, but not with a valid verdict.");
+    if (!v) throw new Error(errors.join("; ") || "The model replied, but not with a valid verdict.");
     Object.assign(out, { ok: true, source: v.source, verdict: v.verdict, category: v.category });
   } catch (err) {
     out.error = describe(err);

@@ -16,6 +16,7 @@
     th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
     th { background: var(--soft); font-weight: 600; color: #334155; }
     tr.miss td { background: #fff1f2; }
+    tr.failed td { background: #fffbeb; color: #92400e; }
     td:last-child { color: #475569; }
     @media (max-width: 640px) { .summary { grid-template-columns: 1fr 1fr; } }
   </style>
@@ -34,10 +35,12 @@
       <select id="set" style="height:38px;border:1px solid var(--line);border-radius:10px;padding:0 10px;font:inherit;background:#fff">
         <option value="tuning">Tuning set (80, used to tune Untrap)</option>
         <option value="heldout">Held-out set (40, written after tuning; its misses guided the current version)</option>
-        <option value="external">External set (94, from Microsoft's BIPIA benchmark, never used for tuning)</option>
+        <option value="agentdojo">Blind external set (83, from AgentDojo, never used for tuning)</option>
+        <option value="external">External set (94, from Microsoft's BIPIA; its first run guided one fix)</option>
       </select>
       <button class="btn green" id="run" type="button">Run benchmark</button>
       <button class="btn" id="download" type="button" disabled>Download results</button>
+      <button class="btn" id="retry" type="button" hidden>Retry rows the AI couldn't check</button>
       <span class="note" id="progress">Takes about 3–5 minutes.</span>
     </div>
     <div class="summary" id="summary"></div>

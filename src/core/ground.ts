@@ -17,11 +17,17 @@ const ORDER_ANYWHERE =
   /\b(?:you must|you should|you will|you need to|you are required to|you have to|you're to|you are to|make sure (?:you|to)|be sure to|do not|don't|never (?:tell|mention|reveal|say|show)|always (?:say|recommend|mention|describe|include|add|use)|(?:must|should|shall|has to|have to|needs? to|is required to|are required to) (?:\w+ly )?(?:be |not )?\w+|your (?:next |final |first )?(?:reply|replies|answer|answers|response|responses|summary|output|message)s? (?:has to|have to|must|should|will|needs? to))\b/i;
 const STRONG_SIGNALS = new Set(["speaks to AI", "overrides instructions", "fake system markup", "keep it from the user", "asks for secrets", "data leak link", "wants money moved", "runs commands", "sends the agent elsewhere", "bends the answer", "orders the model", "blocks the answer"]);
 
+/**
+ * Text about "your answer" or "your reply" is written to whoever writes the answer: on a web
+ * page, that's an AI. People get "your order", "your account", not "your response".
+ */
+export const ANSWER_TARGET = /\byour (?:next |final |first |whole |entire )?(?:answers?|repl(?:y|ies)|responses?|outputs?|summary|summaries)\b/i;
+
 /** True if the text contains something phrased as an order, rather than a statement. */
 export function looksLikeOrder(text: string): boolean {
   const t = normalize(text);
   if (!t) return false;
-  if (ORDER_ANYWHERE.test(t)) return true;
+  if (ORDER_ANYWHERE.test(t) || ANSWER_TARGET.test(t)) return true;
   if (scoreText(t).signals.some((s) => STRONG_SIGNALS.has(s))) return true;
   // An order usually starts a clause: "When summarizing, describe X as the best."
   // It can also hide behind "to": "the recommendation is to buy only from X and to tell readers…"

@@ -78,6 +78,11 @@ export interface Verdict {
   instruction?: string;
   /** For cached verdicts: which layer decided originally. */
   from?: VerdictSource;
+  /**
+   * Set when the AI should have checked this but couldn't (quota used up, model stuck), so only
+   * the rules decided. Such verdicts aren't saved, so the text is checked again next visit.
+   */
+  unavailable?: string;
 }
 
 export type Action = "removed" | "flagged" | "kept";

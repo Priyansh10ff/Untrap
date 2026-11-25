@@ -1,6 +1,7 @@
 import { SAMPLES, type Sample } from "../bench/samples.ts";
 import { HELDOUT } from "../bench/heldout.ts";
 import { EXTERNAL } from "../bench/external-bipia.ts";
+import { EXTERNAL_AGENTDOJO } from "../bench/external-agentdojo.ts";
 import { pct, score, type Outcome } from "../bench/metrics.ts";
 import { rulesVerdict, selectCandidates } from "../core/policy.ts";
 import type { JudgeResult, Msg, Settings } from "../core/messages.ts";
@@ -27,9 +28,11 @@ let rows: Row[] = [];
 // The tuning set was used to tune the rules and prompts; the held-out set never was.
 const TUNING = { name: "tuning", samples: SAMPLES };
 const HELD_OUT = { name: "heldout", samples: HELDOUT };
-// Written by Microsoft for the BIPIA benchmark, not by this project, and never used for tuning.
+// Written by Microsoft for the BIPIA benchmark. Its first run guided one fix (short hidden orders).
 const EXTERNAL_SET = { name: "external-bipia", samples: EXTERNAL };
-const SETS: Record<string, typeof TUNING> = { tuning: TUNING, heldout: HELD_OUT, external: EXTERNAL_SET };
+// Written by the AgentDojo authors (ETH Zurich). Added after that fix, never used for tuning.
+const AGENTDOJO_SET = { name: "external-agentdojo", samples: EXTERNAL_AGENTDOJO };
+const SETS: Record<string, typeof TUNING> = { tuning: TUNING, heldout: HELD_OUT, external: EXTERNAL_SET, agentdojo: AGENTDOJO_SET };
 const currentSet = () => SETS[$<HTMLSelectElement>("set").value] ?? TUNING;
 
 async function runOne(s: Sample): Promise<Row> {
@@ -42,23 +45,28 @@ async function runOne(s: Sample): Promise<Row> {
   return {
     ...base,
     predicted: r.verdict.verdict === "benign" ? "benign" : "attack",
-    decidedBy: r.verdict.source,
+    // "unavailable": the AI should have checked this but couldn't (quota, stuck model). That's
+    // not a judgement, so it's shown and counted separately, and can be retried.
+    decidedBy: r.verdict.unavailable ? "unavailable" : r.verdict.source,
     ms: r.ms,
     rulesOnly,
     secondOpinion: r.secondOpinion,
-    reason: r.verdict.reason,
+    reason: r.verdict.unavailable ? `AI unavailable: ${r.verdict.unavailable}` : r.verdict.reason,
   };
 }
+
+const failed = (r: Row) => r.decidedBy === "unavailable" || r.decidedBy === "error";
 
 function renderRow(r: Row) {
   const tr = document.createElement("tr");
   const ok = r.expected === r.predicted;
-  tr.className = ok ? "" : "miss";
+  tr.className = failed(r) ? "failed" : ok ? "" : "miss";
+  if (r.reason) tr.title = r.reason;
   const cells = [
     r.id,
     r.expected,
     r.predicted,
-    { filtered: "Rules (skipped)", on_device: "On-device", in_cloud: "Cloud", rules: "Rules" }[r.decidedBy] ?? r.decidedBy,
+    { filtered: "Rules (skipped)", on_device: "On-device", in_cloud: "Cloud", rules: "Rules", unavailable: "AI unavailable", error: "Error" }[r.decidedBy] ?? r.decidedBy,
     r.secondOpinion ? "yes" : "",
     r.ms !== undefined ? `${(r.ms / 1000).toFixed(1)}s` : "",
     ok ? "✓" : "✗",
@@ -83,6 +91,8 @@ function renderSummary() {
     ["AI decisions on-device", pct(s.onDeviceShare), "free and private"],
     ["Median time per check", `${(s.medianMs / 1000).toFixed(1)}s`, `${pct(s.skippedByRules)} needed no AI`],
   ];
+  const notChecked = rows.filter(failed).length;
+  if (notChecked) cards.unshift(["AI couldn't check", String(notChecked), "quota or a stuck model: retry before trusting these scores"]);
   $("summary").replaceChildren(
     ...cards.map(([label, value, sub]) => {
       const d = document.createElement("div");
@@ -95,6 +105,36 @@ function renderSummary() {
   );
 }
 
+function renderAll() {
+  $("rows").replaceChildren();
+  rows.forEach(renderRow);
+  renderSummary();
+  $<HTMLButtonElement>("retry").hidden = !rows.some(failed);
+}
+
+async function runSafely(s: Sample): Promise<Row> {
+  try {
+    return await runOne(s);
+  } catch (err) {
+    return { id: s.id, expected: s.label, predicted: "benign", decidedBy: "error", text: s.text, technique: s.technique, rulesOnly: "benign", secondOpinion: false, reason: (err as Error).message };
+  }
+}
+
+$("retry").addEventListener("click", async () => {
+  const button = $<HTMLButtonElement>("retry");
+  button.disabled = true;
+  const byId = new Map(currentSet().samples.map((s) => [s.id, s]));
+  const todo = rows.filter(failed);
+  for (const [i, r] of todo.entries()) {
+    $("progress").textContent = `Retrying ${i + 1} of ${todo.length}…`;
+    const s = byId.get(r.id);
+    if (s) rows[rows.indexOf(r)] = await runSafely(s);
+    renderAll();
+  }
+  $("progress").textContent = rows.some(failed) ? `${rows.filter(failed).length} still couldn't be checked. Wait a minute and retry.` : "All rows checked by the AI.";
+  button.disabled = false;
+});
+
 $("run").addEventListener("click", async () => {
   const button = $<HTMLButtonElement>("run");
   button.disabled = true;
@@ -106,14 +146,11 @@ $("run").addEventListener("click", async () => {
   const set = currentSet().samples;
   for (const [i, s] of set.entries()) {
     $("progress").textContent = `Checking ${i + 1} of ${set.length}…`;
-    try {
-      rows.push(await runOne(s));
-    } catch (err) {
-      rows.push({ id: s.id, expected: s.label, predicted: "benign", decidedBy: "error", text: s.text, technique: s.technique, rulesOnly: "benign", secondOpinion: false, reason: (err as Error).message });
-    }
+    rows.push(await runSafely(s));
     renderRow(rows.at(-1)!);
     renderSummary();
   }
+  $<HTMLButtonElement>("retry").hidden = !rows.some(failed);
   $("progress").textContent = `Done: ${set.length} samples in ${Math.round((Date.now() - started) / 1000)}s.`;
   button.disabled = false;
   $<HTMLButtonElement>("download").disabled = false;
@@ -125,7 +162,7 @@ const chromeMajor = () => navigator.userAgent.match(/Chrome\/(\d+)/)?.[1] ?? "un
 $("download").addEventListener("click", () => {
   const s = score(rows);
   const rules = score(rows.map((r) => ({ ...r, predicted: r.rulesOnly })));
-  const report = { date: new Date().toISOString(), set: currentSet().name, chrome: chromeMajor(), samples: rows.length, untrap: s, rulesOnly: rules, rows };
+  const report = { date: new Date().toISOString(), set: currentSet().name, chrome: chromeMajor(), samples: rows.length, aiUnavailable: rows.filter(failed).length, untrap: s, rulesOnly: rules, rows };
   const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }));
   const a = document.createElement("a");
   a.href = url;
@@ -147,6 +184,7 @@ $("set").addEventListener("change", () => {
   $("summary").replaceChildren();
   $<HTMLButtonElement>("download").disabled = true;
   $("progress").textContent = "";
+  $<HTMLButtonElement>("retry").hidden = true;
   showCount();
 });
 showCount();

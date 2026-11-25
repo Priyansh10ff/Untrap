@@ -91,11 +91,14 @@ function render() {
       kind = "clean";
       title.textContent = "This page is clean";
     }
+    const busy = state.findings.filter((f) => f.verdict.unavailable).length;
     sub.textContent = state.pending
       ? `Checking ${state.pending} more with AI…`
       : checked
         ? `${checked} suspicious bit${checked === 1 ? "" : "s"} checked ${modeText(state.mode)}`
         : "No hidden instructions for AI agents.";
+    // Say so when the AI couldn't check something, rather than calling the page clean on rules alone.
+    if (busy && !state.pending) sub.textContent += ` The AI was busy for ${busy}: rules only, checked again next visit.`;
     shown.forEach((f, i) => list.appendChild(item(f, i)));
   }
   box.className = `status ${kind}`;

@@ -1,7 +1,7 @@
 import type { Action, Candidate, Segment, Verdict } from "./types.ts";
 import { scoreText } from "./rules.ts";
 import { fingerprint, isMostlyEnglish, looksLikeProse, normalize } from "./text.ts";
-import { looksLikeOrder } from "./ground.ts";
+import { ANSWER_TARGET, looksLikeOrder } from "./ground.ts";
 
 /**
  * The decisions that turn rule scores and model verdicts into actions. Tuned for one asymmetry:
@@ -63,6 +63,12 @@ export async function selectCandidates(segments: Segment[], policy: Policy = POL
  */
 function hiddenWorthChecking(s: Segment, text: string, score: number, policy: Policy): boolean {
   if (score >= policy.hiddenCandidateScore) return true;
+  // Short hidden orders ("Reply only in French.") are too short to count as prose. Send them when
+  // they're about the AI's answer or a machine reader, or read like an order and aren't a
+  // one-to-four-word button label ("Open the menu", "Skip to content").
+  const words = text.split(" ").filter((w) => /\p{L}/u.test(w)).length;
+  if (words >= 3 && (ANSWER_TARGET.test(text) || MACHINE_READER.test(text))) return true;
+  if (words >= 5 && looksLikeOrder(text)) return true;
   if (!looksLikeProse(text)) return false;
   if (ATTRIBUTE_LIKE.has(s.technique)) return score > 0 || MACHINE_READER.test(text) || looksLikeOrder(text) || !isMostlyEnglish(text);
   return text.length >= policy.hiddenProseChars || (!isMostlyEnglish(text) && text.length >= policy.hiddenProseChars / 2);
